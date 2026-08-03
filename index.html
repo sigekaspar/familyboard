@@ -27,27 +27,30 @@
   }
   header{
     display:flex; flex-direction:column; gap:8px;
-    padding:14px 20px; background: var(--bg);
+    padding:14px 20px; background: #ffffff;
     border-bottom:1px solid var(--line); position:sticky; top:0; z-index:50;
   }
   .header-top{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
-  header h1{font-size:1.15rem; margin:0; font-weight:600; letter-spacing:0.2px;}
-  .board-tabs{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+  header h1{font-size:1.15rem; margin:0; font-weight:600; letter-spacing:0.2px; color:#000;}
+  .board-tabs{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .board-tab-wrap{display:flex; align-items:stretch;}
   .board-tab{
-    padding:5px 12px; border-radius:6px; border:1px solid var(--line);
-    background:transparent; cursor:pointer; font-size:0.85rem; color:var(--ink);
+    padding:5px 12px; border:1px solid var(--line);
+    background:#eee; cursor:pointer; font-size:0.85rem; color:#000;
+    border-radius:6px;
   }
-  .board-tab.active{color:#fff;}
+  .board-tab-wrap.has-settings{ border-radius:6px; overflow:hidden; border:1px solid #000; }
+  .board-tab-wrap.has-settings .board-tab{ border:none; border-radius:0; }
+  .board-tab.active{background:#000; color:#fff; border-color:#000;}
   .board-tab-add{
     width:26px; height:26px; border-radius:6px; border:1px solid var(--line);
     background:transparent; cursor:pointer; font-size:1rem; line-height:1; color:var(--ink);
   }
-  .board-tab-wrap{display:flex; align-items:center; gap:2px;}
   .board-tab-settings{
-    width:22px; height:22px; border:none; background:transparent; cursor:pointer;
-    font-size:0.8rem; opacity:0.6; color:var(--ink);
+    width:26px; border:none; background:#000; cursor:pointer;
+    font-size:0.8rem; color:#fff; border-left:1px solid rgba(255,255,255,0.3);
   }
-  .board-tab-settings:hover{opacity:1;}
+  .board-tab-settings:hover{opacity:0.8;}
   .color-swatches{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0;}
   .color-swatch{width:32px; height:32px; border-radius:50%; cursor:pointer; border:2px solid transparent;}
   .color-swatch.selected{border-color:#000;}
@@ -308,21 +311,38 @@ async function connectContainer(){
   }
 }
 
+let boardsMeta = {}; // {folderName: {color}} - zentral im "Boards"-Ordner gespeichert, gilt für alle Geräte/Personen
+
+async function loadBoardsMeta(){
+  try{
+    const res = await graphFetchRaw(`/drives/${containerRef.driveId}/items/${containerRef.itemId}:/_boards_meta.json:/content`);
+    return await res.json();
+  }catch(e){ return {}; }
+}
+async function saveBoardsMeta(){
+  try{
+    await graphFetchRaw(`/drives/${containerRef.driveId}/items/${containerRef.itemId}:/_boards_meta.json:/content`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(boardsMeta)
+    });
+  }catch(e){ console.warn('meta save failed', e); }
+}
+async function setBoardColor(name, color){
+  boardsMeta[name] = boardsMeta[name] || {};
+  boardsMeta[name].color = color;
+  await saveBoardsMeta();
+}
+
 async function refreshBoardsList(){
   const res = await graphFetch(`/drives/${containerRef.driveId}/items/${containerRef.itemId}/children?$select=id,name,folder`);
   const folders = (res.value||[]).filter(it=>it.folder);
-  const colorMap = JSON.parse(localGet('board_colors')||'{}');
+  boardsMeta = await loadBoardsMeta();
+  let metaChanged = false;
   boardsList = folders.map(f=>{
-    if(!colorMap[f.name]) colorMap[f.name] = BOARD_COLORS[Object.keys(colorMap).length % BOARD_COLORS.length];
-    return { folderName:f.name, itemId:f.id, driveId:containerRef.driveId, color:colorMap[f.name] };
+    if(!boardsMeta[f.name]){ boardsMeta[f.name] = { color: BOARD_COLORS[Object.keys(boardsMeta).length % BOARD_COLORS.length] }; metaChanged = true; }
+    return { folderName:f.name, itemId:f.id, driveId:containerRef.driveId, color:boardsMeta[f.name].color };
   });
-  localSet('board_colors', JSON.stringify(colorMap));
+  if(metaChanged) await saveBoardsMeta();
   return boardsList;
-}
-function saveBoardColor(name, color){
-  const colorMap = JSON.parse(localGet('board_colors')||'{}');
-  colorMap[name] = color;
-  localSet('board_colors', JSON.stringify(colorMap));
 }
 function nextUnusedColor(){
   const used = boardsList.map(b=>b.color);
@@ -387,8 +407,10 @@ async function saveBoardModal(){
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ name, folder:{}, '@microsoft.graph.conflictBehavior':'fail' })
       });
-      saveBoardColor(name, boardModalColor);
       await refreshBoardsList();
+      await setBoardColor(name, boardModalColor);
+      const created = boardsList.find(b=>b.folderName===name);
+      if(created) created.color = boardModalColor;
       closeBoardModal();
       document.getElementById('setup-screen').style.display = 'none';
       await switchBoard(name);
@@ -398,7 +420,7 @@ async function saveBoardModal(){
       alert(`Board "${name}" konnte nicht erstellt werden (existiert es evtl. schon?): ${err.message}`);
     }
   } else {
-    saveBoardColor(name, boardModalColor);
+    await setBoardColor(name, boardModalColor);
     const b = boardsList.find(x=>x.folderName===name);
     if(b){ b.color = boardModalColor; if(boardRef.folderName===name){ boardRef.color = boardModalColor; applyBoardColor(); } renderBoardTabs(); }
     closeBoardModal();
@@ -411,6 +433,8 @@ async function deleteBoard(){
   if(!confirm(`Board "${name}" WIRKLICH löschen? Der Ordner samt Inhalt wird in OneDrive gelöscht (landet im Papierkorb, ca. 30 Tage wiederherstellbar).`)) return;
   try{
     await graphFetchRaw(`/drives/${b.driveId}/items/${b.itemId}`, { method:'DELETE' });
+    delete boardsMeta[name];
+    await saveBoardsMeta();
     closeBoardModal();
     await refreshBoardsList();
     if(boardsList.length){
@@ -439,12 +463,13 @@ function renderBoardTabs(){
   const el = document.getElementById('board-tabs');
   if(!boardsList.length){ el.style.display='none'; return; }
   el.style.display = 'flex';
-  el.innerHTML = boardsList.map(b=>
-    `<div class="board-tab-wrap">
-      <button class="board-tab ${b.folderName===boardRef.folderName?'active':''}" style="${b.folderName===boardRef.folderName?`background:${b.color};border-color:${b.color};`:''}" onclick="switchBoard('${escapeAttr(b.folderName)}')">${escapeHtml(b.folderName)}</button>
-      <button class="board-tab-settings" onclick="openEditBoardModal('${escapeAttr(b.folderName)}')" title="Board bearbeiten">⚙</button>
-    </div>`
-  ).join('') + `<button class="board-tab-add" onclick="openAddBoardModal()" title="Neues Board hinzufügen">+</button>`;
+  el.innerHTML = boardsList.map(b=>{
+    const isActive = b.folderName===boardRef.folderName;
+    return `<div class="board-tab-wrap ${isActive?'has-settings':''}">
+      <button class="board-tab ${isActive?'active':''}" style="${isActive?'':`background:${b.color};`}" onclick="switchBoard('${escapeAttr(b.folderName)}')">${escapeHtml(b.folderName)}</button>
+      ${isActive?`<button class="board-tab-settings" onclick="openEditBoardModal('${escapeAttr(b.folderName)}')" title="Board bearbeiten">⚙</button>`:''}
+    </div>`;
+  }).join('') + `<button class="board-tab-add" onclick="openAddBoardModal()" title="Neues Board hinzufügen">+</button>`;
 }
 
 // ---------- Board content ----------
