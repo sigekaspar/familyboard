@@ -7,100 +7,102 @@
 <script src="https://alcdn.msauth.net/browser/2.28.1/js/msal-browser.min.js" onerror="window.__msalLoadFailed=true"></script>
 <style>
   :root{
-    --cork: #c9a876;
-    --cork-dark: #a3824f;
-    --paper: #fbf7ee;
-    --ink: #2e2620;
-    --pin-red: #c1443a;
-    --pin-blue: #3a6ea5;
-    --shadow: rgba(30,20,10,0.35);
+    --bg: #d9a827;
+    --card-bg: #161616;
+    --card-text: #f2f2f2;
+    --ink: #2a2210;
+    --accent: #1a1a1a;
+    --accent-hover: #000;
+    --line: rgba(0,0,0,0.15);
+    --shadow: rgba(0,0,0,0.25);
   }
   *{box-sizing:border-box;}
   body{
     margin:0;
     font-family: 'Segoe UI', system-ui, sans-serif;
-    background:
-      radial-gradient(circle at 20% 20%, rgba(255,255,255,0.05), transparent 40%),
-      repeating-linear-gradient(45deg, rgba(0,0,0,0.03) 0 2px, transparent 2px 6px),
-      var(--cork);
+    background: var(--bg);
     color: var(--ink);
     min-height:100vh;
   }
   header{
-    display:flex; align-items:center; justify-content:space-between;
-    padding:16px 24px; background: var(--cork-dark);
-    box-shadow: 0 2px 8px var(--shadow); position:sticky; top:0; z-index:50;
-    flex-wrap:wrap; gap:12px;
+    display:flex; flex-direction:column; gap:8px;
+    padding:14px 20px; background: var(--bg);
+    border-bottom:1px solid var(--line); position:sticky; top:0; z-index:50;
   }
-  header h1{font-family: Georgia, 'Times New Roman', serif; font-size:1.4rem; margin:0; color:#fff8ec;}
-  header h1 span{opacity:0.75; font-size:0.85rem; font-weight:normal; display:block;}
-  .user-chip{display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.15); padding:6px 12px; border-radius:20px; color:#fff8ec; font-size:0.9rem;}
-  .btn{border:none; border-radius:8px; padding:10px 18px; font-size:0.95rem; cursor:pointer; font-weight:600;}
-  .btn:active{transform:scale(0.97);}
-  .btn-primary{background:var(--pin-red); color:#fff;}
-  .btn-secondary{background:#fff8ec; color:var(--ink);}
+  .header-top{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
+  header h1{font-size:1.15rem; margin:0; font-weight:600; letter-spacing:0.2px;}
+  .board-tabs{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+  .board-tab{
+    padding:5px 12px; border-radius:6px; border:1px solid var(--line);
+    background:transparent; cursor:pointer; font-size:0.85rem; color:var(--ink);
+  }
+  .board-tab.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .board-tab-add{
+    width:26px; height:26px; border-radius:6px; border:1px solid var(--line);
+    background:transparent; cursor:pointer; font-size:1rem; line-height:1; color:var(--ink);
+  }
+  .user-chip{display:flex; align-items:center; gap:6px; font-size:0.85rem; opacity:0.85;}
+  .btn{border:none; border-radius:6px; padding:8px 16px; font-size:0.9rem; cursor:pointer; font-weight:600;}
+  .btn:active{transform:scale(0.98);}
+  .btn-primary{background:var(--accent); color:#fff;}
+  .btn-primary:hover{background:var(--accent-hover);}
+  .btn-secondary{background:transparent; color:var(--ink); border:1px solid var(--line);}
 
   #login-screen{display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:80vh; text-align:center; padding:24px;}
-  .board-icon{font-size:4rem; margin-bottom:8px;}
-  #login-screen h2{font-family: Georgia, serif; font-size:1.8rem; margin:0 0 8px;}
-  #login-screen p{max-width:420px; color:#3a2f24; opacity:0.85; line-height:1.5;}
-  .error-box{background:#fde4e1; border:1px solid var(--pin-red); color:#7a2318; padding:12px 14px; border-radius:8px; font-size:0.9rem; margin-top:14px; text-align:left; max-width:440px;}
+  #login-screen h2{font-size:1.4rem; margin:0 0 8px; font-weight:600;}
+  #login-screen p{max-width:420px; color:var(--ink); opacity:0.8; line-height:1.5;}
+  .error-box{background:#fff; border:1px solid #b23; color:#7a2318; padding:10px 14px; border-radius:6px; font-size:0.85rem; margin-top:14px; text-align:left; max-width:440px;}
 
-  #setup-screen{max-width:480px; margin:60px auto; background:var(--paper); padding:28px; border-radius:12px; box-shadow:0 8px 24px var(--shadow); display:none;}
-  #setup-screen input{width:100%; padding:10px 12px; border-radius:8px; border:1px solid #c9b998; font-size:1rem; margin:10px 0;}
+  #setup-screen{max-width:420px; margin:60px auto; background:#fff; padding:24px; border-radius:8px; display:none;}
+  #setup-screen input{width:100%; padding:9px 10px; border-radius:6px; border:1px solid #ccc; font-size:0.95rem; margin:10px 0;}
 
-  #board{display:none; padding:32px; max-width:1400px; margin:0 auto;}
-  .board-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:28px; padding-bottom:100px;}
+  #board{display:none; padding:24px; max-width:1400px; margin:0 auto;}
+  .board-grid{display:flex; flex-wrap:wrap; align-content:flex-start; gap:12px; padding-bottom:100px;}
   .note{
-    background:var(--paper); border-radius:2px; padding:18px 16px 16px;
-    box-shadow:0 6px 14px var(--shadow), 0 1px 0 rgba(255,255,255,0.4) inset;
-    position:relative; transform:rotate(var(--tilt,0deg));
-    min-height:140px; display:flex; flex-direction:column; font-size:0.95rem; line-height:1.4; word-break:break-word;
+    background:var(--card-bg); color:var(--card-text); border-radius:5px; padding:10px 12px;
+    display:flex; flex-direction:column; font-size:0.9rem; line-height:1.4; word-break:break-word;
+    width:fit-content; max-width:230px; min-width:110px;
   }
-  .note::before{
-    content:''; position:absolute; top:-10px; left:50%; transform:translateX(-50%);
-    width:18px; height:18px; border-radius:50%;
-    background: radial-gradient(circle at 35% 30%, #fff, var(--pin-color,var(--pin-red)) 60%);
-    box-shadow:0 3px 4px var(--shadow);
-  }
-  .note img{max-width:100%; border-radius:4px; margin-bottom:8px; display:block; min-height:60px; background:#eee0c8;}
+  .note img{max-width:100%; border-radius:3px; margin-bottom:6px; display:block; min-height:40px; background:#2a2a2a;}
   .note .note-text{flex:1; white-space:pre-wrap;}
-  .note a.note-link{color:var(--pin-blue); font-weight:600; word-break:break-all;}
-  .note .note-file-link{display:inline-block; margin-top:6px; padding:6px 10px; background:#fff; border-radius:6px; border:1px solid #ddd; font-size:0.85rem; cursor:pointer; color:var(--ink);}
-  .note .meta{margin-top:10px; padding-top:8px; border-top:1px dashed #d8c9a8; font-size:0.75rem; opacity:0.65; display:flex; justify-content:space-between; align-items:center;}
-  .note .del-btn{background:none; border:none; cursor:pointer; opacity:0.4; font-size:0.9rem;}
+  .note a.note-link{color:#8fc6ff; font-weight:600; word-break:break-all;}
+  .note .note-file-link{display:inline-block; margin-top:4px; padding:4px 8px; background:#2a2a2a; border-radius:4px; font-size:0.8rem; cursor:pointer; color:#fff;}
+  .note .meta{margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.12); font-size:0.7rem; opacity:0.6; display:flex; justify-content:space-between; align-items:center; gap:8px;}
+  .note .del-btn{background:none; border:none; cursor:pointer; opacity:0.5; font-size:0.85rem; color:#fff;}
   .note .del-btn:hover{opacity:1;}
 
-  .fab{position:fixed; bottom:28px; right:28px; width:60px; height:60px; border-radius:50%; background:var(--pin-red); color:#fff; font-size:1.8rem; border:none; cursor:pointer; box-shadow:0 6px 16px var(--shadow); z-index:60;}
+  .fab{position:fixed; bottom:24px; right:24px; width:52px; height:52px; border-radius:50%; background:var(--accent); color:#fff; font-size:1.6rem; border:none; cursor:pointer; box-shadow:0 4px 10px var(--shadow); z-index:60;}
 
-  .modal-overlay{display:none; position:fixed; inset:0; background:rgba(20,14,8,0.55); align-items:center; justify-content:center; z-index:100; padding:16px;}
-  .modal{background:var(--paper); border-radius:14px; padding:24px; width:100%; max-width:440px; box-shadow:0 12px 40px var(--shadow);}
-  .modal h3{margin-top:0; font-family:Georgia,serif;}
-  .type-tabs{display:flex; gap:8px; margin-bottom:14px;}
-  .type-tab{flex:1; padding:8px; text-align:center; border-radius:8px; border:1px solid #c9b998; cursor:pointer; font-size:0.85rem; background:#fff;}
-  .type-tab.active{background:var(--pin-red); color:#fff; border-color:var(--pin-red);}
-  .modal textarea, .modal input[type=text], .modal input[type=url]{width:100%; padding:10px; border-radius:8px; border:1px solid #c9b998; font-size:0.95rem; font-family:inherit; margin-bottom:10px;}
-  .modal textarea{min-height:90px; resize:vertical;}
+  .modal-overlay{display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); align-items:center; justify-content:center; z-index:100; padding:16px;}
+  .modal{background:#fff; border-radius:10px; padding:22px; width:100%; max-width:420px;}
+  .modal h3{margin-top:0; font-size:1.1rem; font-weight:600;}
+  .type-tabs{display:flex; gap:6px; margin-bottom:14px;}
+  .type-tab{flex:1; padding:7px; text-align:center; border-radius:6px; border:1px solid #ccc; cursor:pointer; font-size:0.8rem; background:#fff;}
+  .type-tab.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .modal textarea, .modal input[type=text], .modal input[type=url]{width:100%; padding:9px; border-radius:6px; border:1px solid #ccc; font-size:0.9rem; font-family:inherit; margin-bottom:10px;}
+  .modal textarea{min-height:80px; resize:vertical;}
   .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:8px;}
-  .hint{font-size:0.8rem; opacity:0.65; margin-top:-4px; margin-bottom:10px;}
-  .status-bar{position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#2e2620; color:#fff8ec; padding:8px 16px; border-radius:20px; font-size:0.85rem; z-index:70; opacity:0; transition:opacity 0.3s; pointer-events:none;}
+  .hint{font-size:0.78rem; opacity:0.6; margin-top:-4px; margin-bottom:10px;}
+  .status-bar{position:fixed; top:60px; left:50%; transform:translateX(-50%); background:#1a1a1a; color:#fff; padding:7px 14px; border-radius:16px; font-size:0.82rem; z-index:70; opacity:0; transition:opacity 0.3s; pointer-events:none;}
   .status-bar.show{opacity:0.92;}
-  .empty-hint{text-align:center; color:#5a4a38; opacity:0.7; padding:60px 20px; font-size:1.05rem;}
-  .spinner{width:20px; height:20px; border:3px solid rgba(0,0,0,0.15); border-top-color:var(--pin-red); border-radius:50%; animation:spin 0.8s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px;}
+  .empty-hint{text-align:center; color:var(--ink); opacity:0.6; padding:60px 20px; font-size:1rem;}
+  .spinner{width:18px; height:18px; border:3px solid rgba(0,0,0,0.15); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px;}
   @keyframes spin{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
 
 <header>
-  <h1>📌 Family Board <span id="folder-label"></span></h1>
-  <div id="header-right"></div>
+  <div class="header-top">
+    <h1>Family Board</h1>
+    <div id="header-right"></div>
+  </div>
+  <div class="board-tabs" id="board-tabs" style="display:none;"></div>
 </header>
 
 <div id="status-bar" class="status-bar"></div>
 
 <div id="login-screen">
-  <div class="board-icon">🧵</div>
   <h2>Bei Microsoft anmelden</h2>
   <p>Meldet euch mit eurem privaten Microsoft-Konto an, um auf den gemeinsamen OneDrive-Ordner zuzugreifen. Jede Person nutzt ihr eigenes Konto.</p>
   <div id="login-area"><button class="btn btn-primary" onclick="login()">Anmelden</button></div>
@@ -180,6 +182,7 @@ try{
 
 let me = { name:null, email:null, account:null };
 let boardRef = { driveId:null, itemId:null, folderName:null };
+let boardsList = [];
 let notesById = {};
 let deltaLink = null;
 let currentNoteType = 'text';
@@ -240,24 +243,33 @@ async function graphFetchRaw(path, options={}){
 }
 
 // ---------- Folder resolution ----------
+async function resolveFolderByName(name){
+  let driveId, itemId;
+  try{
+    const item = await graphFetch(`/me/drive/root:/${encodeURIComponent(name)}`);
+    driveId = item.parentReference.driveId; itemId = item.id;
+  }catch(e404){
+    const shared = await graphFetch('/me/drive/sharedWithMe');
+    const match = (shared.value||[]).find(it => it.name === name);
+    if(!match) throw new Error('not_found');
+    driveId = match.remoteItem.parentReference.driveId; itemId = match.remoteItem.id;
+  }
+  return { driveId, itemId, folderName:name };
+}
+
+function saveBoardsList(){ localSet('boards_list', JSON.stringify(boardsList)); }
+
 async function connectFolder(){
   const name = document.getElementById('folder-name-input').value.trim();
   const errEl = document.getElementById('setup-error');
   errEl.innerHTML = '';
   if(!name) return;
   try{
-    let driveId, itemId;
-    try{
-      const item = await graphFetch(`/me/drive/root:/${encodeURIComponent(name)}`);
-      driveId = item.parentReference.driveId; itemId = item.id;
-    }catch(e404){
-      const shared = await graphFetch('/me/drive/sharedWithMe');
-      const match = (shared.value||[]).find(it => it.name === name);
-      if(!match) throw new Error('not_found');
-      driveId = match.remoteItem.parentReference.driveId; itemId = match.remoteItem.id;
-    }
-    boardRef = { driveId, itemId, folderName:name };
-    localSet('board_folder_ref', JSON.stringify(boardRef));
+    const ref = await resolveFolderByName(name);
+    boardsList = [ref];
+    saveBoardsList();
+    boardRef = ref;
+    localSet('active_board_name', name);
     await ensureAttachSubfolder();
     startBoard();
   }catch(err){
@@ -267,6 +279,42 @@ async function connectFolder(){
       Microsoft-Konto (${escapeHtml(me.email||'')}) geteilt (Bearbeiten-Berechtigung)?
     </div>`;
   }
+}
+
+async function addBoard(){
+  const name = prompt('Name des neuen OneDrive-Ordners (muss existieren oder mit dir geteilt sein):');
+  if(!name) return;
+  const trimmed = name.trim();
+  if(!trimmed) return;
+  if(boardsList.some(b=>b.folderName===trimmed)){ showStatus('Board existiert schon'); switchBoard(trimmed); return; }
+  try{
+    const ref = await resolveFolderByName(trimmed);
+    boardsList.push(ref);
+    saveBoardsList();
+    await switchBoard(trimmed);
+  }catch(err){
+    alert(`Ordner "${trimmed}" wurde nicht gefunden — existiert er in deinem OneDrive oder wurde er mit dir geteilt?`);
+  }
+}
+
+async function switchBoard(name){
+  const ref = boardsList.find(b=>b.folderName===name);
+  if(!ref) return;
+  boardRef = ref;
+  localSet('active_board_name', name);
+  notesById = {}; deltaLink = null;
+  renderBoardTabs();
+  await ensureAttachSubfolder();
+  await fullLoadNotes();
+}
+
+function renderBoardTabs(){
+  const el = document.getElementById('board-tabs');
+  if(!boardsList.length){ el.style.display='none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = boardsList.map(b=>
+    `<button class="board-tab ${b.folderName===boardRef.folderName?'active':''}" onclick="switchBoard('${escapeAttr(b.folderName)}')">${escapeHtml(b.folderName)}</button>`
+  ).join('') + `<button class="board-tab-add" onclick="addBoard()" title="Neues Board hinzufügen">+</button>`;
 }
 async function ensureAttachSubfolder(){
   try{ await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}`); }
@@ -280,14 +328,14 @@ async function ensureAttachSubfolder(){
 
 // ---------- Board ----------
 function renderHeader(){
-  document.getElementById('header-right').innerHTML = `<div class="user-chip">👤 ${escapeHtml(me.name||me.email||'')}</div>`;
-  document.getElementById('folder-label').textContent = boardRef.folderName ? '· '+boardRef.folderName : '';
+  document.getElementById('header-right').innerHTML = `<div class="user-chip">${escapeHtml(me.name||me.email||'')}</div>`;
 }
 async function startBoard(){
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('board').style.display = 'block';
   document.getElementById('fab-add').style.display = 'block';
   renderHeader();
+  renderBoardTabs();
   await fullLoadNotes();
   if(pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(pollDelta, 15000);
@@ -344,8 +392,6 @@ function renderBoard(){
   observeImages();
 }
 function renderNote(n){
-  const color = colorForAuthor(n.authorEmail||n.author||'?');
-  const tilt = ((hashCode(n.fileId)%7)-3);
   const canDelete = n.authorEmail === me.email;
   const time = n.timestamp ? new Date(n.timestamp).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
   let body = '';
@@ -361,7 +407,7 @@ function renderNote(n){
       <br><span class="note-file-link" onclick="downloadAttachment('${n.attachmentPath}','${escapeAttr(n.attachmentName||'datei')}')">Herunterladen</span></div>
       ${n.text?`<div class="note-text">${escapeHtml(n.text)}</div>`:''}`;
   }
-  return `<div class="note" style="--tilt:${tilt}deg; --pin-color:${color};">
+  return `<div class="note">
     ${body}
     <div class="meta">
       <span>${escapeHtml(n.author||'?')} · ${time}</span>
@@ -438,12 +484,11 @@ async function saveNote(){
       note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name);
       await uploadAttachment(f, note.attachmentPath);
     }
-    await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/note_${id}.json:/content`, {
+    const created = await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/note_${id}.json:/content`, {
       method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(note)
     });
-    notesById[id+'_local'] = { fileId:id+'_local', ...note };
+    notesById[created.id] = { fileId:created.id, ...note };
     renderBoard(); closeAddModal(); showStatus('Notiz angeheftet');
-    pollDelta();
   }catch(err){
     alert(err.message || 'Fehler beim Speichern');
   }finally{ btn.disabled = false; btn.textContent = 'Anheften'; }
@@ -495,11 +540,13 @@ function hashCode(str){ let h=0; for(let i=0;i<(str||'').length;i++){ h=((h<<5)-
       me.email = account.username;
       renderHeader();
       document.getElementById('login-screen').style.display = 'none';
-      const savedRef = localGet('board_folder_ref');
-      if(savedRef){
-        boardRef = JSON.parse(savedRef);
-        document.getElementById('folder-name-input').value = boardRef.folderName || 'FamilyBoard';
+      const savedList = localGet('boards_list');
+      const activeName = localGet('active_board_name');
+      if(savedList){
         try{
+          boardsList = JSON.parse(savedList);
+          boardRef = boardsList.find(b=>b.folderName===activeName) || boardsList[0];
+          document.getElementById('folder-name-input').value = boardRef.folderName || 'FamilyBoard';
           await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}`);
           startBoard();
         }catch(e){ document.getElementById('setup-screen').style.display = 'block'; }
