@@ -41,6 +41,30 @@
     width:26px; height:26px; border-radius:6px; border:1px solid var(--line);
     background:transparent; cursor:pointer; font-size:1rem; line-height:1; color:var(--ink);
   }
+  .board-tab-wrap{display:flex; align-items:center; gap:2px;}
+  .board-tab-settings{
+    width:22px; height:22px; border:none; background:transparent; cursor:pointer;
+    font-size:0.8rem; opacity:0.6; color:var(--ink);
+  }
+  .board-tab-settings:hover{opacity:1;}
+  .color-swatches{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0;}
+  .color-swatch{
+    width:32px; height:32px; border-radius:50%; cursor:pointer; border:2px solid transparent;
+  }
+  .color-swatch.selected{border-color:#000;}
+
+  .note{position:relative;}
+  .note .note-actions{
+    position:absolute; top:6px; right:6px; display:flex; gap:4px; opacity:0; transition:opacity 0.15s;
+  }
+  .note:hover .note-actions{opacity:1;}
+  .note .note-actions button{
+    background:rgba(255,255,255,0.12); border:none; border-radius:4px; cursor:pointer;
+    font-size:0.75rem; color:#fff; padding:2px 5px;
+  }
+  .note .note-actions button:hover{background:rgba(255,255,255,0.25);}
+  .note.dragging{opacity:0.4;}
+  .note{cursor:grab;}
   .user-chip{display:flex; align-items:center; gap:6px; font-size:0.85rem; opacity:0.85;}
   .btn{border:none; border-radius:6px; padding:8px 16px; font-size:0.9rem; cursor:pointer; font-weight:600;}
   .btn:active{transform:scale(0.98);}
@@ -122,7 +146,7 @@
 
 <div class="modal-overlay" id="add-modal">
   <div class="modal">
-    <h3>Neue Notiz</h3>
+    <h3 id="note-modal-title">Neue Notiz</h3>
     <div class="type-tabs">
       <div class="type-tab active" data-type="text" onclick="setNoteType('text')">📝 Text</div>
       <div class="type-tab" data-type="link" onclick="setNoteType('link')">🔗 Link</div>
@@ -151,6 +175,20 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="board-modal">
+  <div class="modal">
+    <h3 id="board-modal-title">Board hinzufügen</h3>
+    <input type="text" id="board-name-input" placeholder="Ordnername (z.B. FamilyBoard)">
+    <div class="hint">Muss in deinem OneDrive existieren oder mit dir geteilt sein.</div>
+    <div class="color-swatches" id="board-color-swatches"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="board-delete-btn" style="display:none; margin-right:auto; color:#b23;" onclick="deleteBoard()">Board entfernen</button>
+      <button class="btn btn-secondary" onclick="closeBoardModal()">Abbrechen</button>
+      <button class="btn btn-primary" id="board-save-btn" onclick="saveBoardModal()">Hinzufügen</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ============ KONFIGURATION ============
 const CLIENT_ID = '482edec5-c2bf-49db-85bf-cbd5ebfa1989';
@@ -158,7 +196,8 @@ const REDIRECT_URI = 'https://sigekaspar.github.io/familyboard/'; // muss exakt 
 const SCOPES = ['Files.ReadWrite', 'offline_access', 'User.Read'];
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const ATTACH_SUBFOLDER = 'anhaenge';
-const PIN_COLORS = ['#c1443a','#3a6ea5','#4b7c59','#d4a13b','#7a5c8e'];
+const ORDER_FILE = '_order.json';
+const BOARD_COLORS = ['#d9a827','#4a90d9','#5cb85c','#c1443a','#7a5c8e','#e07b39','#2c2c2c'];
 
 const msalConfig = {
   auth: {
@@ -181,13 +220,16 @@ try{
 }
 
 let me = { name:null, email:null, account:null };
-let boardRef = { driveId:null, itemId:null, folderName:null };
+let boardRef = { driveId:null, itemId:null, folderName:null, color:null };
 let boardsList = [];
 let notesById = {};
+let noteOrder = [];
 let deltaLink = null;
 let currentNoteType = 'text';
+let editingNoteId = null;
 let pollTimer = null;
-let authorColorMap = {};
+let boardModalMode = 'add'; // 'add' | 'edit'
+let boardModalColor = BOARD_COLORS[0];
 
 function showStatus(msg, ms=2500){
   const el = document.getElementById('status-bar');
@@ -258,6 +300,13 @@ async function resolveFolderByName(name){
 }
 
 function saveBoardsList(){ localSet('boards_list', JSON.stringify(boardsList)); }
+function nextUnusedColor(){
+  const used = boardsList.map(b=>b.color);
+  return BOARD_COLORS.find(c=>!used.includes(c)) || BOARD_COLORS[0];
+}
+function applyBoardColor(){
+  document.documentElement.style.setProperty('--bg', boardRef.color || BOARD_COLORS[0]);
+}
 
 async function connectFolder(){
   const name = document.getElementById('folder-name-input').value.trim();
@@ -266,10 +315,12 @@ async function connectFolder(){
   if(!name) return;
   try{
     const ref = await resolveFolderByName(name);
+    ref.color = BOARD_COLORS[0];
     boardsList = [ref];
     saveBoardsList();
     boardRef = ref;
     localSet('active_board_name', name);
+    applyBoardColor();
     await ensureAttachSubfolder();
     startBoard();
   }catch(err){
@@ -281,19 +332,74 @@ async function connectFolder(){
   }
 }
 
-async function addBoard(){
-  const name = prompt('Name des neuen OneDrive-Ordners (muss existieren oder mit dir geteilt sein):');
+// ---------- Board add/edit modal ----------
+function renderColorSwatches(){
+  const el = document.getElementById('board-color-swatches');
+  el.innerHTML = BOARD_COLORS.map(c=>
+    `<div class="color-swatch ${c===boardModalColor?'selected':''}" style="background:${c};" onclick="pickBoardColor('${c}')"></div>`
+  ).join('');
+}
+function pickBoardColor(c){ boardModalColor = c; renderColorSwatches(); }
+
+function openAddBoardModal(){
+  boardModalMode = 'add';
+  boardModalColor = nextUnusedColor();
+  document.getElementById('board-modal-title').textContent = 'Board hinzufügen';
+  document.getElementById('board-name-input').value = '';
+  document.getElementById('board-name-input').disabled = false;
+  document.getElementById('board-save-btn').textContent = 'Hinzufügen';
+  document.getElementById('board-delete-btn').style.display = 'none';
+  renderColorSwatches();
+  document.getElementById('board-modal').style.display = 'flex';
+}
+function openEditBoardModal(folderName){
+  const b = boardsList.find(x=>x.folderName===folderName);
+  if(!b) return;
+  boardModalMode = 'edit';
+  boardModalColor = b.color || BOARD_COLORS[0];
+  document.getElementById('board-modal-title').textContent = 'Board bearbeiten';
+  document.getElementById('board-name-input').value = b.folderName;
+  document.getElementById('board-name-input').disabled = true;
+  document.getElementById('board-save-btn').textContent = 'Speichern';
+  document.getElementById('board-delete-btn').style.display = 'inline-block';
+  renderColorSwatches();
+  document.getElementById('board-modal').style.display = 'flex';
+}
+function closeBoardModal(){ document.getElementById('board-modal').style.display = 'none'; }
+
+async function saveBoardModal(){
+  const name = document.getElementById('board-name-input').value.trim();
   if(!name) return;
-  const trimmed = name.trim();
-  if(!trimmed) return;
-  if(boardsList.some(b=>b.folderName===trimmed)){ showStatus('Board existiert schon'); switchBoard(trimmed); return; }
-  try{
-    const ref = await resolveFolderByName(trimmed);
-    boardsList.push(ref);
-    saveBoardsList();
-    await switchBoard(trimmed);
-  }catch(err){
-    alert(`Ordner "${trimmed}" wurde nicht gefunden — existiert er in deinem OneDrive oder wurde er mit dir geteilt?`);
+  if(boardModalMode === 'add'){
+    if(boardsList.some(b=>b.folderName===name)){ showStatus('Board existiert schon'); closeBoardModal(); switchBoard(name); return; }
+    try{
+      const ref = await resolveFolderByName(name);
+      ref.color = boardModalColor;
+      boardsList.push(ref);
+      saveBoardsList();
+      closeBoardModal();
+      await switchBoard(name);
+    }catch(err){
+      alert(`Ordner "${name}" wurde nicht gefunden — existiert er in deinem OneDrive oder wurde er mit dir geteilt?`);
+    }
+  } else {
+    const b = boardsList.find(x=>x.folderName===name);
+    if(b){ b.color = boardModalColor; saveBoardsList(); if(boardRef.folderName===name){ boardRef.color = boardModalColor; applyBoardColor(); } renderBoardTabs(); }
+    closeBoardModal();
+  }
+}
+async function deleteBoard(){
+  const name = document.getElementById('board-name-input').value.trim();
+  if(!confirm(`Board "${name}" wirklich aus dieser App entfernen? (Der OneDrive-Ordner selbst bleibt unangetastet, nur die Verknüpfung hier wird entfernt.)`)) return;
+  boardsList = boardsList.filter(b=>b.folderName!==name);
+  saveBoardsList();
+  closeBoardModal();
+  if(boardsList.length){
+    await switchBoard(boardsList[0].folderName);
+  } else {
+    document.getElementById('board').style.display = 'none';
+    document.getElementById('fab-add').style.display = 'none';
+    document.getElementById('setup-screen').style.display = 'block';
   }
 }
 
@@ -302,7 +408,8 @@ async function switchBoard(name){
   if(!ref) return;
   boardRef = ref;
   localSet('active_board_name', name);
-  notesById = {}; deltaLink = null;
+  notesById = {}; deltaLink = null; noteOrder = [];
+  applyBoardColor();
   renderBoardTabs();
   await ensureAttachSubfolder();
   await fullLoadNotes();
@@ -313,8 +420,11 @@ function renderBoardTabs(){
   if(!boardsList.length){ el.style.display='none'; return; }
   el.style.display = 'flex';
   el.innerHTML = boardsList.map(b=>
-    `<button class="board-tab ${b.folderName===boardRef.folderName?'active':''}" onclick="switchBoard('${escapeAttr(b.folderName)}')">${escapeHtml(b.folderName)}</button>`
-  ).join('') + `<button class="board-tab-add" onclick="addBoard()" title="Neues Board hinzufügen">+</button>`;
+    `<div class="board-tab-wrap">
+      <button class="board-tab ${b.folderName===boardRef.folderName?'active':''}" style="${b.folderName===boardRef.folderName?`background:${b.color};border-color:${b.color};`:''}" onclick="switchBoard('${escapeAttr(b.folderName)}')">${escapeHtml(b.folderName)}</button>
+      <button class="board-tab-settings" onclick="openEditBoardModal('${escapeAttr(b.folderName)}')" title="Board bearbeiten">⚙</button>
+    </div>`
+  ).join('') + `<button class="board-tab-add" onclick="openAddBoardModal()" title="Neues Board hinzufügen">+</button>`;
 }
 async function ensureAttachSubfolder(){
   try{ await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}`); }
@@ -334,18 +444,12 @@ async function startBoard(){
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('board').style.display = 'block';
   document.getElementById('fab-add').style.display = 'block';
+  applyBoardColor();
   renderHeader();
   renderBoardTabs();
   await fullLoadNotes();
   if(pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(pollDelta, 15000);
-}
-function colorForAuthor(email){
-  if(!authorColorMap[email]){
-    const idx = Object.keys(authorColorMap).length % PIN_COLORS.length;
-    authorColorMap[email] = PIN_COLORS[idx];
-  }
-  return authorColorMap[email];
 }
 async function fullLoadNotes(){
   try{
@@ -355,10 +459,25 @@ async function fullLoadNotes(){
     let next = res['@odata.nextLink'];
     while(next){ const r2 = await graphFetch(next); items = items.concat(r2.value||[]); deltaLink = r2['@odata.deltaLink']||deltaLink; next = r2['@odata.nextLink']; }
     await processDeltaItems(items);
+    await loadOrder();
     renderBoard();
   }catch(err){
     document.getElementById('board-grid').innerHTML = `<div class="error-box">Notizen konnten nicht geladen werden: ${escapeHtml(err.message)}</div>`;
   }
+}
+async function loadOrder(){
+  try{
+    const res = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ORDER_FILE}:/content`);
+    const data = await res.json();
+    noteOrder = data.order || [];
+  }catch(e){ noteOrder = []; }
+}
+async function saveOrder(){
+  try{
+    await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ORDER_FILE}:/content`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ order: noteOrder })
+    });
+  }catch(e){ console.warn('order save failed', e); }
 }
 async function pollDelta(){
   if(!deltaLink) return fullLoadNotes();
@@ -384,16 +503,45 @@ async function processDeltaItems(items){
     }catch(e){ console.warn('could not read note', item.name, e); }
   }
 }
+function orderedNotes(){
+  const all = Object.values(notesById);
+  const byId = {}; all.forEach(n=>byId[n.fileId]=n);
+  const ordered = noteOrder.map(id=>byId[id]).filter(Boolean);
+  const missing = all.filter(n=>!noteOrder.includes(n.fileId)).sort((a,b)=> (a.timestamp||'').localeCompare(b.timestamp||''));
+  const result = ordered.concat(missing);
+  if(missing.length){ noteOrder = result.map(n=>n.fileId); saveOrder(); }
+  return result;
+}
 function renderBoard(){
   const grid = document.getElementById('board-grid');
-  const notes = Object.values(notesById).sort((a,b)=> (b.timestamp||'').localeCompare(a.timestamp||''));
+  const notes = orderedNotes();
   if(!notes.length){ grid.innerHTML = `<div class="empty-hint">Noch keine Notizen. Tippe unten rechts auf "+" um die erste anzuheften.</div>`; return; }
   grid.innerHTML = notes.map(n => renderNote(n)).join('');
   observeImages();
+  attachDragHandlers();
+}
+let dragSourceId = null;
+function attachDragHandlers(){
+  document.querySelectorAll('.note[data-id]').forEach(el=>{
+    el.addEventListener('dragstart', ()=>{ dragSourceId = el.dataset.id; el.classList.add('dragging'); });
+    el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); });
+    el.addEventListener('dragover', (e)=>{ e.preventDefault(); });
+    el.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      const targetId = el.dataset.id;
+      if(!dragSourceId || dragSourceId===targetId) return;
+      const ids = noteOrder.length ? noteOrder.slice() : Object.keys(notesById);
+      const from = ids.indexOf(dragSourceId), to = ids.indexOf(targetId);
+      if(from===-1 || to===-1) return;
+      ids.splice(from,1); ids.splice(to,0,dragSourceId);
+      noteOrder = ids;
+      saveOrder();
+      renderBoard();
+    });
+  });
 }
 function renderNote(n){
-  const canDelete = n.authorEmail === me.email;
-  const time = n.timestamp ? new Date(n.timestamp).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+  const canEdit = n.authorEmail === me.email;
   let body = '';
   if(n.type === 'text'){
     body = `<div class="note-text">${escapeHtml(n.text||'')}</div>`;
@@ -407,12 +555,12 @@ function renderNote(n){
       <br><span class="note-file-link" onclick="downloadAttachment('${n.attachmentPath}','${escapeAttr(n.attachmentName||'datei')}')">Herunterladen</span></div>
       ${n.text?`<div class="note-text">${escapeHtml(n.text)}</div>`:''}`;
   }
-  return `<div class="note">
+  return `<div class="note" draggable="true" data-id="${n.fileId}">
+    ${canEdit?`<div class="note-actions">
+      <button onclick="openEditNoteModal('${n.fileId}')" title="Bearbeiten">✎</button>
+      <button onclick="deleteNote('${n.fileId}')" title="Löschen">🗑</button>
+    </div>`:''}
     ${body}
-    <div class="meta">
-      <span>${escapeHtml(n.author||'?')} · ${time}</span>
-      ${canDelete?`<button class="del-btn" onclick="deleteNote('${n.fileId}')">🗑</button>`:''}
-    </div>
   </div>`;
 }
 const imgObserver = new IntersectionObserver(async (entries)=>{
@@ -441,16 +589,38 @@ async function deleteNote(fileId){
   if(!confirm('Notiz wirklich löschen?')) return;
   try{
     await graphFetchRaw(`/drives/${boardRef.driveId}/items/${fileId}`, { method:'DELETE' });
-    delete notesById[fileId]; renderBoard(); showStatus('Notiz gelöscht');
+    delete notesById[fileId];
+    noteOrder = noteOrder.filter(id=>id!==fileId);
+    saveOrder();
+    renderBoard(); showStatus('Notiz gelöscht');
   }catch(e){ showStatus('Löschen fehlgeschlagen'); }
 }
 
-// ---------- Add note modal ----------
-function openAddModal(){ document.getElementById('add-modal').style.display = 'flex'; }
+// ---------- Add/edit note modal ----------
+function openAddModal(){
+  editingNoteId = null;
+  document.getElementById('note-modal-title').textContent = 'Neue Notiz';
+  document.getElementById('save-note-btn').textContent = 'Anheften';
+  document.getElementById('add-modal').style.display = 'flex';
+}
+function openEditNoteModal(fileId){
+  const n = notesById[fileId];
+  if(!n) return;
+  editingNoteId = fileId;
+  document.getElementById('note-modal-title').textContent = 'Notiz bearbeiten';
+  document.getElementById('save-note-btn').textContent = 'Speichern';
+  setNoteType(n.type);
+  if(n.type === 'text'){ document.getElementById('input-text').value = n.text||''; }
+  else if(n.type === 'link'){ document.getElementById('input-link').value = n.url||''; document.getElementById('input-link-note').value = n.text||''; }
+  else if(n.type === 'image'){ document.getElementById('input-image-note').value = n.text||''; }
+  else if(n.type === 'file'){ document.getElementById('input-file-note').value = n.text||''; }
+  document.getElementById('add-modal').style.display = 'flex';
+}
 function closeAddModal(){
   document.getElementById('add-modal').style.display = 'none';
   ['input-text','input-link','input-link-note','input-image-note','input-file-note'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('input-image').value = ''; document.getElementById('input-file').value = '';
+  editingNoteId = null;
   setNoteType('text');
 }
 function setNoteType(type){
@@ -460,10 +630,17 @@ function setNoteType(type){
 }
 async function saveNote(){
   const btn = document.getElementById('save-note-btn');
-  btn.disabled = true; btn.textContent = 'Speichert…';
+  const isEdit = !!editingNoteId;
+  btn.disabled = true; btn.textContent = isEdit ? 'Speichert…' : 'Speichert…';
   try{
-    const id = uuid();
-    const note = { id, type: currentNoteType, author: me.name, authorEmail: me.email, timestamp: new Date().toISOString() };
+    const existing = isEdit ? notesById[editingNoteId] : null;
+    const id = existing ? existing.id : uuid();
+    const note = {
+      id, type: currentNoteType,
+      author: existing ? existing.author : me.name,
+      authorEmail: existing ? existing.authorEmail : me.email,
+      timestamp: existing ? existing.timestamp : new Date().toISOString()
+    };
     if(currentNoteType === 'text'){
       note.text = document.getElementById('input-text').value.trim();
       if(!note.text) throw new Error('Bitte Text eingeben.');
@@ -473,25 +650,37 @@ async function saveNote(){
       if(!note.url) throw new Error('Bitte Link eingeben.');
     } else if(currentNoteType === 'image'){
       const f = document.getElementById('input-image').files[0];
-      if(!f) throw new Error('Bitte Bild auswählen.');
       note.text = document.getElementById('input-image-note').value.trim();
-      note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name);
-      await uploadAttachment(f, note.attachmentPath);
+      if(f){
+        note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name);
+        await uploadAttachment(f, note.attachmentPath);
+      } else if(existing && existing.attachmentPath){
+        note.attachmentName = existing.attachmentName; note.attachmentPath = existing.attachmentPath;
+      } else {
+        throw new Error('Bitte Bild auswählen.');
+      }
     } else if(currentNoteType === 'file'){
       const f = document.getElementById('input-file').files[0];
-      if(!f) throw new Error('Bitte Datei auswählen.');
       note.text = document.getElementById('input-file-note').value.trim();
-      note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name);
-      await uploadAttachment(f, note.attachmentPath);
+      if(f){
+        note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name);
+        await uploadAttachment(f, note.attachmentPath);
+      } else if(existing && existing.attachmentPath){
+        note.attachmentName = existing.attachmentName; note.attachmentPath = existing.attachmentPath;
+      } else {
+        throw new Error('Bitte Datei auswählen.');
+      }
     }
     const created = await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/note_${id}.json:/content`, {
       method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(note)
     });
+    if(isEdit && editingNoteId !== created.id){ delete notesById[editingNoteId]; }
     notesById[created.id] = { fileId:created.id, ...note };
-    renderBoard(); closeAddModal(); showStatus('Notiz angeheftet');
+    if(!noteOrder.includes(created.id)){ noteOrder.push(created.id); saveOrder(); }
+    renderBoard(); closeAddModal(); showStatus(isEdit ? 'Notiz gespeichert' : 'Notiz angeheftet');
   }catch(err){
     alert(err.message || 'Fehler beim Speichern');
-  }finally{ btn.disabled = false; btn.textContent = 'Anheften'; }
+  }finally{ btn.disabled = false; btn.textContent = isEdit ? 'Speichern' : 'Anheften'; }
 }
 async function uploadAttachment(file, path){
   const encodedPath = encodeURIComponent(path);
@@ -545,6 +734,8 @@ function hashCode(str){ let h=0; for(let i=0;i<(str||'').length;i++){ h=((h<<5)-
       if(savedList){
         try{
           boardsList = JSON.parse(savedList);
+          boardsList.forEach((b,i)=>{ if(!b.color) b.color = BOARD_COLORS[i % BOARD_COLORS.length]; });
+          saveBoardsList();
           boardRef = boardsList.find(b=>b.folderName===activeName) || boardsList[0];
           document.getElementById('folder-name-input').value = boardRef.folderName || 'FamilyBoard';
           await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}`);
