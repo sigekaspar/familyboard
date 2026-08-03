@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Family Board</title>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<style>
+  :root{
+    --cork: #c9a876;
+    --cork-dark: #a3824f;
+    --paper: #fbf7ee;
+    --ink: #2e2620;
+    --pin-red: #c1443a;
+    --pin-blue: #3a6ea5;
+    --shadow: rgba(30,20,10,0.35);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(255,255,255,0.05), transparent 40%),
+      repeating-linear-gradient(45deg, rgba(0,0,0,0.03) 0 2px, transparent 2px 6px),
+      var(--cork);
+    color: var(--ink);
+    min-height:100vh;
+  }
+  header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:16px 24px; background: var(--cork-dark);
+    box-shadow: 0 2px 8px var(--shadow); position:sticky; top:0; z-index:50;
+    flex-wrap:wrap; gap:12px;
+  }
+  header h1{font-family: Georgia, 'Times New Roman', serif; font-size:1.4rem; margin:0; color:#fff8ec;}
+  header h1 span{opacity:0.75; font-size:0.85rem; font-weight:normal; display:block;}
+  .user-chip{display:flex; align-items:center; gap:8px; background:rgba(255,255,255,0.15); padding:6px 12px; border-radius:20px; color:#fff8ec; font-size:0.9rem;}
+  .btn{border:none; border-radius:8px; padding:10px 18px; font-size:0.95rem; cursor:pointer; font-weight:600;}
+  .btn:active{transform:scale(0.97);}
+  .btn-primary{background:var(--pin-red); color:#fff;}
+  .btn-secondary{background:#fff8ec; color:var(--ink);}
+
+  #login-screen{display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:80vh; text-align:center; padding:24px;}
+  .board-icon{font-size:4rem; margin-bottom:8px;}
+  #login-screen h2{font-family: Georgia, serif; font-size:1.8rem; margin:0 0 8px;}
+  #login-screen p{max-width:420px; color:#3a2f24; opacity:0.85; line-height:1.5;}
+  .error-box{background:#fde4e1; border:1px solid var(--pin-red); color:#7a2318; padding:12px 14px; border-radius:8px; font-size:0.9rem; margin-top:14px; text-align:left; max-width:440px;}
+
+  #setup-screen{max-width:480px; margin:60px auto; background:var(--paper); padding:28px; border-radius:12px; box-shadow:0 8px 24px var(--shadow); display:none;}
+  #setup-screen input{width:100%; padding:10px 12px; border-radius:8px; border:1px solid #c9b998; font-size:1rem; margin:10px 0;}
+
+  #board{display:none; padding:32px; max-width:1400px; margin:0 auto;}
+  .board-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(240px,1fr)); gap:28px; padding-bottom:100px;}
+  .note{
+    background:var(--paper); border-radius:2px; padding:18px 16px 16px;
+    box-shadow:0 6px 14px var(--shadow), 0 1px 0 rgba(255,255,255,0.4) inset;
+    position:relative; transform:rotate(var(--tilt,0deg));
+    min-height:140px; display:flex; flex-direction:column; font-size:0.95rem; line-height:1.4; word-break:break-word;
+  }
+  .note::before{
+    content:''; position:absolute; top:-10px; left:50%; transform:translateX(-50%);
+    width:18px; height:18px; border-radius:50%;
+    background: radial-gradient(circle at 35% 30%, #fff, var(--pin-color,var(--pin-red)) 60%);
+    box-shadow:0 3px 4px var(--shadow);
+  }
+  .note img{max-width:100%; border-radius:4px; margin-bottom:8px; display:block; min-height:60px; background:#eee0c8;}
+  .note .note-text{flex:1; white-space:pre-wrap;}
+  .note a.note-link{color:var(--pin-blue); font-weight:600; word-break:break-all;}
+  .note .note-file-link{display:inline-block; margin-top:6px; padding:6px 10px; background:#fff; border-radius:6px; border:1px solid #ddd; font-size:0.85rem; cursor:pointer; color:var(--ink);}
+  .note .meta{margin-top:10px; padding-top:8px; border-top:1px dashed #d8c9a8; font-size:0.75rem; opacity:0.65; display:flex; justify-content:space-between; align-items:center;}
+  .note .del-btn{background:none; border:none; cursor:pointer; opacity:0.4; font-size:0.9rem;}
+  .note .del-btn:hover{opacity:1;}
+
+  .fab{position:fixed; bottom:28px; right:28px; width:60px; height:60px; border-radius:50%; background:var(--pin-red); color:#fff; font-size:1.8rem; border:none; cursor:pointer; box-shadow:0 6px 16px var(--shadow); z-index:60;}
+
+  .modal-overlay{display:none; position:fixed; inset:0; background:rgba(20,14,8,0.55); align-items:center; justify-content:center; z-index:100; padding:16px;}
+  .modal{background:var(--paper); border-radius:14px; padding:24px; width:100%; max-width:440px; box-shadow:0 12px 40px var(--shadow);}
+  .modal h3{margin-top:0; font-family:Georgia,serif;}
+  .type-tabs{display:flex; gap:8px; margin-bottom:14px;}
+  .type-tab{flex:1; padding:8px; text-align:center; border-radius:8px; border:1px solid #c9b998; cursor:pointer; font-size:0.85rem; background:#fff;}
+  .type-tab.active{background:var(--pin-red); color:#fff; border-color:var(--pin-red);}
+  .modal textarea, .modal input[type=text], .modal input[type=url]{width:100%; padding:10px; border-radius:8px; border:1px solid #c9b998; font-size:0.95rem; font-family:inherit; margin-bottom:10px;}
+  .modal textarea{min-height:90px; resize:vertical;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:8px;}
+  .hint{font-size:0.8rem; opacity:0.65; margin-top:-4px; margin-bottom:10px;}
+  .status-bar{position:fixed; top:70px; left:50%; transform:translateX(-50%); background:#2e2620; color:#fff8ec; padding:8px 16px; border-radius:20px; font-size:0.85rem; z-index:70; opacity:0; transition:opacity 0.3s; pointer-events:none;}
+  .status-bar.show{opacity:0.92;}
+  .empty-hint{text-align:center; color:#5a4a38; opacity:0.7; padding:60px 20px; font-size:1.05rem;}
+  .spinner{width:20px; height:20px; border:3px solid rgba(0,0,0,0.15); border-top-color:var(--pin-red); border-radius:50%; animation:spin 0.8s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📌 Family Board <span id="folder-label"></span></h1>
+  <div id="header-right"></div>
+</header>
+
+<div id="status-bar" class="status-bar"></div>
+
+<div id="login-screen">
+  <div class="board-icon">🧵</div>
+  <h2>Bei Microsoft anmelden</h2>
+  <p>Meldet euch mit eurem privaten Microsoft-Konto an, um auf den gemeinsamen OneDrive-Ordner zuzugreifen. Jede Person nutzt ihr eigenes Konto.</p>
+  <div id="login-area"><button class="btn btn-primary" onclick="login()">Anmelden</button></div>
+</div>
+
+<div id="setup-screen">
+  <h2 style="margin-top:0;font-family:Georgia,serif;">Ordner verbinden</h2>
+  <p style="font-size:0.9rem;opacity:0.8;">Wie heißt der gemeinsame OneDrive-Ordner? (Muss entweder in deinem eigenen OneDrive liegen oder mit dir geteilt worden sein.)</p>
+  <input type="text" id="folder-name-input" value="FamilyBoard" placeholder="Ordnername">
+  <button class="btn btn-primary" style="width:100%;" onclick="connectFolder()">Verbinden</button>
+  <div id="setup-error"></div>
+</div>
+
+<div id="board"><div id="board-grid" class="board-grid"></div></div>
+
+<button class="fab" id="fab-add" style="display:none;" onclick="openAddModal()">+</button>
+
+<div class="modal-overlay" id="add-modal">
+  <div class="modal">
+    <h3>Neue Notiz</h3>
+    <div class="type-tabs">
+      <div class="type-tab active" data-type="text" onclick="setNoteType('text')">📝 Text</div>
+      <div class="type-tab" data-type="link" onclick="setNoteType('link')">🔗 Link</div>
+      <div class="type-tab" data-type="image" onclick="setNoteType('image')">🖼️ Bild</div>
+      <div class="type-tab" data-type="file" onclick="setNoteType('file')">📎 Datei</div>
+    </div>
+    <div id="field-text"><textarea id="input-text" placeholder="Was möchtest du teilen?"></textarea></div>
+    <div id="field-link" style="display:none;">
+      <input type="url" id="input-link" placeholder="https://...">
+      <textarea id="input-link-note" placeholder="Kurze Notiz dazu (optional)"></textarea>
+    </div>
+    <div id="field-image" style="display:none;">
+      <input type="file" id="input-image" accept="image/*">
+      <div class="hint">Wird in den Unterordner /anhaenge hochgeladen.</div>
+      <textarea id="input-image-note" placeholder="Beschreibung (optional)"></textarea>
+    </div>
+    <div id="field-file" style="display:none;">
+      <input type="file" id="input-file">
+      <div class="hint">Wird in den Unterordner /anhaenge hochgeladen.</div>
+      <textarea id="input-file-note" placeholder="Beschreibung (optional)"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeAddModal()">Abbrechen</button>
+      <button class="btn btn-primary" id="save-note-btn" onclick="saveNote()">Anheften</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============ KONFIGURATION ============
+const CLIENT_ID = '482edec5-c2bf-49db-85bf-cbd5ebfa1989';
+const REDIRECT_URI = 'https://sigekaspar.github.io/familyboard/'; // muss exakt der Azure-Redirect-URI entsprechen
+const SCOPES = ['Files.ReadWrite', 'offline_access', 'User.Read'];
+const GRAPH = 'https://graph.microsoft.com/v1.0';
+const ATTACH_SUBFOLDER = 'anhaenge';
+const PIN_COLORS = ['#c1443a','#3a6ea5','#4b7c59','#d4a13b','#7a5c8e'];
+
+const msalConfig = {
+  auth: {
+    clientId: CLIENT_ID,
+    authority: 'https://login.microsoftonline.com/consumers',
+    redirectUri: REDIRECT_URI
+  },
+  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false }
+};
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+
+let me = { name:null, email:null, account:null };
+let boardRef = { driveId:null, itemId:null, folderName:null };
+let notesById = {};
+let deltaLink = null;
+let currentNoteType = 'text';
+let pollTimer = null;
+let authorColorMap = {};
+
+function showStatus(msg, ms=2500){
+  const el = document.getElementById('status-bar');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove('show'), ms);
+}
+
+// ---------- Persistent, non-token metadata (Claude storage not used here since this runs on GitHub Pages, not as a Claude artifact) ----------
+function localGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
+function localSet(key,val){ try{ localStorage.setItem(key,val); }catch(e){} }
+
+// ---------- Auth ----------
+async function login(){
+  try{
+    await msalInstance.loginRedirect({ scopes: SCOPES });
+  }catch(err){
+    document.getElementById('login-area').innerHTML = `<div class="error-box">Login konnte nicht gestartet werden: ${escapeHtml(err.message)}</div>
+      <button class="btn btn-primary" style="margin-top:10px;" onclick="login()">Erneut versuchen</button>`;
+  }
+}
+
+async function getAccessToken(){
+  const account = me.account || msalInstance.getAllAccounts()[0];
+  if(!account) throw new Error('Nicht angemeldet');
+  try{
+    const result = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
+    return result.accessToken;
+  }catch(e){
+    // Silent refresh failed (e.g. token/session expired) -> interactive fallback
+    await msalInstance.acquireTokenRedirect({ scopes: SCOPES, account });
+    throw new Error('redirecting_for_reauth');
+  }
+}
+
+async function graphFetch(path, options={}){
+  const token = await getAccessToken();
+  const url = path.startsWith('http') ? path : GRAPH + path;
+  const res = await fetch(url, { ...options, headers:{ 'Authorization':'Bearer '+token, ...(options.headers||{}) } });
+  if(!res.ok) throw new Error('Graph-Fehler '+res.status+': '+(await res.text()));
+  return res.status===204 ? null : await res.json();
+}
+async function graphFetchRaw(path, options={}){
+  const token = await getAccessToken();
+  const url = path.startsWith('http') ? path : GRAPH + path;
+  const res = await fetch(url, { ...options, headers:{ 'Authorization':'Bearer '+token, ...(options.headers||{}) } });
+  if(!res.ok) throw new Error('Graph-Fehler '+res.status);
+  return res;
+}
+
+// ---------- Folder resolution ----------
+async function connectFolder(){
+  const name = document.getElementById('folder-name-input').value.trim();
+  const errEl = document.getElementById('setup-error');
+  errEl.innerHTML = '';
+  if(!name) return;
+  try{
+    let driveId, itemId;
+    try{
+      const item = await graphFetch(`/me/drive/root:/${encodeURIComponent(name)}`);
+      driveId = item.parentReference.driveId; itemId = item.id;
+    }catch(e404){
+      const shared = await graphFetch('/me/drive/sharedWithMe');
+      const match = (shared.value||[]).find(it => it.name === name);
+      if(!match) throw new Error('not_found');
+      driveId = match.remoteItem.parentReference.driveId; itemId = match.remoteItem.id;
+    }
+    boardRef = { driveId, itemId, folderName:name };
+    localSet('board_folder_ref', JSON.stringify(boardRef));
+    await ensureAttachSubfolder();
+    startBoard();
+  }catch(err){
+    errEl.innerHTML = `<div class="error-box">
+      Ordner "${escapeHtml(name)}" wurde nicht gefunden — weder in deinem eigenen OneDrive
+      noch unter "Für dich freigegeben". Prüfe: existiert der Ordner? Wurde er mit deinem
+      Microsoft-Konto (${escapeHtml(me.email||'')}) geteilt (Bearbeiten-Berechtigung)?
+    </div>`;
+  }
+}
+async function ensureAttachSubfolder(){
+  try{ await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}`); }
+  catch(e){
+    await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}/children`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name:ATTACH_SUBFOLDER, folder:{}, '@microsoft.graph.conflictBehavior':'rename' })
+    }).catch(()=>{});
+  }
+}
+
+// ---------- Board ----------
+function renderHeader(){
+  document.getElementById('header-right').innerHTML = `<div class="user-chip">👤 ${escapeHtml(me.name||me.email||'')}</div>`;
+  document.getElementById('folder-label').textContent = boardRef.folderName ? '· '+boardRef.folderName : '';
+}
+async function startBoard(){
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('board').style.display = 'block';
+  document.getElementById('fab-add').style.display = 'block';
+  renderHeader();
+  await fullLoadNotes();
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pollDelta, 15000);
+}
+function colorForAuthor(email){
+  if(!authorColorMap[email]){
+    const idx = Object.keys(authorColorMap).length % PIN_COLORS.length;
+    authorColorMap[email] = PIN_COLORS[idx];
+  }
+  return authorColorMap[email];
+}
+async function fullLoadNotes(){
+  try{
+    const res = await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}/delta`);
+    let items = res.value || [];
+    deltaLink = res['@odata.deltaLink'] || null;
+    let next = res['@odata.nextLink'];
+    while(next){ const r2 = await graphFetch(next); items = items.concat(r2.value||[]); deltaLink = r2['@odata.deltaLink']||deltaLink; next = r2['@odata.nextLink']; }
+    await processDeltaItems(items);
+    renderBoard();
+  }catch(err){
+    document.getElementById('board-grid').innerHTML = `<div class="error-box">Notizen konnten nicht geladen werden: ${escapeHtml(err.message)}</div>`;
+  }
+}
+async function pollDelta(){
+  if(!deltaLink) return fullLoadNotes();
+  try{
+    const res = await graphFetch(deltaLink);
+    let items = res.value || [];
+    let link = res['@odata.deltaLink'] || deltaLink;
+    let next = res['@odata.nextLink'];
+    while(next){ const r2 = await graphFetch(next); items = items.concat(r2.value||[]); link = r2['@odata.deltaLink']||link; next = r2['@odata.nextLink']; }
+    deltaLink = link;
+    if(items.length){ await processDeltaItems(items); renderBoard(); }
+  }catch(err){ console.warn('delta poll failed', err); fullLoadNotes(); }
+}
+async function processDeltaItems(items){
+  for(const item of items){
+    if(item.folder) continue;
+    if(item.deleted){ delete notesById[item.id]; continue; }
+    if(!item.name || !item.name.startsWith('note_') || !item.name.endsWith('.json')) continue;
+    try{
+      const contentRes = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${item.id}/content`);
+      const noteData = await contentRes.json();
+      notesById[item.id] = { fileId:item.id, ...noteData };
+    }catch(e){ console.warn('could not read note', item.name, e); }
+  }
+}
+function renderBoard(){
+  const grid = document.getElementById('board-grid');
+  const notes = Object.values(notesById).sort((a,b)=> (b.timestamp||'').localeCompare(a.timestamp||''));
+  if(!notes.length){ grid.innerHTML = `<div class="empty-hint">Noch keine Notizen. Tippe unten rechts auf "+" um die erste anzuheften.</div>`; return; }
+  grid.innerHTML = notes.map(n => renderNote(n)).join('');
+  observeImages();
+}
+function renderNote(n){
+  const color = colorForAuthor(n.authorEmail||n.author||'?');
+  const tilt = ((hashCode(n.fileId)%7)-3);
+  const canDelete = n.authorEmail === me.email;
+  const time = n.timestamp ? new Date(n.timestamp).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+  let body = '';
+  if(n.type === 'text'){
+    body = `<div class="note-text">${escapeHtml(n.text||'')}</div>`;
+  } else if(n.type === 'link'){
+    body = `<div class="note-text">${n.text?escapeHtml(n.text)+'<br>':''}<a class="note-link" href="${escapeAttr(n.url)}" target="_blank" rel="noopener">${escapeHtml(n.url||'')}</a></div>`;
+  } else if(n.type === 'image'){
+    body = `<img loading="lazy" alt="${escapeAttr(n.attachmentName||'Bild')}" data-lazy="${n.attachmentPath}">
+      ${n.text?`<div class="note-text">${escapeHtml(n.text)}</div>`:''}`;
+  } else if(n.type === 'file'){
+    body = `<div class="note-text">📎 ${escapeHtml(n.attachmentName||'Datei')}
+      <br><span class="note-file-link" onclick="downloadAttachment('${n.attachmentPath}','${escapeAttr(n.attachmentName||'datei')}')">Herunterladen</span></div>
+      ${n.text?`<div class="note-text">${escapeHtml(n.text)}</div>`:''}`;
+  }
+  return `<div class="note" style="--tilt:${tilt}deg; --pin-color:${color};">
+    ${body}
+    <div class="meta">
+      <span>${escapeHtml(n.author||'?')} · ${time}</span>
+      ${canDelete?`<button class="del-btn" onclick="deleteNote('${n.fileId}')">🗑</button>`:''}
+    </div>
+  </div>`;
+}
+const imgObserver = new IntersectionObserver(async (entries)=>{
+  for(const entry of entries){
+    if(entry.isIntersecting){
+      const img = entry.target; const path = img.dataset.lazy;
+      if(path && !img.src){
+        try{
+          const res = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
+          const blob = await res.blob(); img.src = URL.createObjectURL(blob);
+        }catch(e){ console.warn('image load failed', e); }
+      }
+      imgObserver.unobserve(img);
+    }
+  }
+});
+function observeImages(){ document.querySelectorAll('.note img[data-lazy]').forEach(img=>imgObserver.observe(img)); }
+async function downloadAttachment(path, filename){
+  try{
+    const res = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
+    const blob = await res.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+  }catch(e){ showStatus('Download fehlgeschlagen'); }
+}
+async function deleteNote(fileId){
+  if(!confirm('Notiz wirklich löschen?')) return;
+  try{
+    await graphFetchRaw(`/drives/${boardRef.driveId}/items/${fileId}`, { method:'DELETE' });
+    delete notesById[fileId]; renderBoard(); showStatus('Notiz gelöscht');
+  }catch(e){ showStatus('Löschen fehlgeschlagen'); }
+}
+
+// ---------- Add note modal ----------
+function openAddModal(){ document.getElementById('add-modal').style.display = 'flex'; }
+function closeAddModal(){
+  document.getElementById('add-modal').style.display = 'none';
+  ['input-text','input-link','input-link-note','input-image-note','input-file-note'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  document.getElementById('input-image').value = ''; document.getElementById('input-file').value = '';
+  setNoteType('text');
+}
+function setNoteType(type){
+  currentNoteType = type;
+  document.querySelectorAll('.type-tab').forEach(t=>t.classList.toggle('active', t.dataset.type===type));
+  ['text','link','image','file'].forEach(t=>{ document.getElementById('field-'+t).style.display = (t===type)?'block':'none'; });
+}
+async function saveNote(){
+  const btn = document.getElementById('save-note-btn');
+  btn.disabled = true; btn.textContent = 'Speichert…';
+  try{
+    const id = uuid();
+    const note = { id, type: currentNoteType, author: me.name, authorEmail: me.email, timestamp: new Date().toISOString() };
+    if(currentNoteType === 'text'){
+      note.text = document.getElementById('input-text').value.trim();
+      if(!note.text) throw new Error('Bitte Text eingeben.');
+    } else if(currentNoteType === 'link'){
+      note.url = document.getElementById('input-link').value.trim();
+      note.text = document.getElementById('input-link-note').value.trim();
+      if(!note.url) throw new Error('Bitte Link eingeben.');
+    } else if(currentNoteType === 'image'){
+      const f = document.getElementById('input-image').files[0];
+      if(!f) throw new Error('Bitte Bild auswählen.');
+      note.text = document.getElementById('input-image-note').value.trim();
+      note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name);
+      await uploadAttachment(f, note.attachmentPath);
+    } else if(currentNoteType === 'file'){
+      const f = document.getElementById('input-file').files[0];
+      if(!f) throw new Error('Bitte Datei auswählen.');
+      note.text = document.getElementById('input-file-note').value.trim();
+      note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name);
+      await uploadAttachment(f, note.attachmentPath);
+    }
+    await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/note_${id}.json:/content`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(note)
+    });
+    notesById[id+'_local'] = { fileId:id+'_local', ...note };
+    renderBoard(); closeAddModal(); showStatus('Notiz angeheftet');
+    pollDelta();
+  }catch(err){
+    alert(err.message || 'Fehler beim Speichern');
+  }finally{ btn.disabled = false; btn.textContent = 'Anheften'; }
+}
+async function uploadAttachment(file, path){
+  const encodedPath = encodeURIComponent(path);
+  if(file.size < 4*1024*1024){
+    await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodedPath}:/content`, { method:'PUT', body: file });
+  } else {
+    const session = await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodedPath}:/createUploadSession`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ item:{ '@microsoft.graph.conflictBehavior':'rename' } })
+    });
+    const chunkSize = 327680 * 10;
+    let start = 0;
+    while(start < file.size){
+      const end = Math.min(start+chunkSize, file.size)-1;
+      const chunk = file.slice(start, end+1);
+      await fetch(session.uploadUrl, {
+        method:'PUT',
+        headers:{ 'Content-Length': (end-start+1).toString(), 'Content-Range': `bytes ${start}-${end}/${file.size}` },
+        body: chunk
+      });
+      start = end+1;
+    }
+  }
+}
+
+// ---------- utils ----------
+function uuid(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{ const r=Math.random()*16|0, v=c==='x'?r:(r&0x3|0x8); return v.toString(16); }); }
+function sanitizeFilename(name){ return name.replace(/[^a-zA-Z0-9._-]/g,'_'); }
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(s){ return escapeHtml(s); }
+function hashCode(str){ let h=0; for(let i=0;i<(str||'').length;i++){ h=((h<<5)-h+str.charCodeAt(i))|0; } return Math.abs(h); }
+
+// ---------- boot ----------
+(async function boot(){
+  try{
+    const response = await msalInstance.handleRedirectPromise();
+    let account = response ? response.account : msalInstance.getAllAccounts()[0];
+    if(account){
+      me.account = account;
+      me.name = account.name;
+      me.email = account.username;
+      renderHeader();
+      document.getElementById('login-screen').style.display = 'none';
+      const savedRef = localGet('board_folder_ref');
+      if(savedRef){
+        boardRef = JSON.parse(savedRef);
+        document.getElementById('folder-name-input').value = boardRef.folderName || 'FamilyBoard';
+        try{
+          await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}`);
+          startBoard();
+        }catch(e){ document.getElementById('setup-screen').style.display = 'block'; }
+      } else {
+        document.getElementById('setup-screen').style.display = 'block';
+      }
+    }
+  }catch(err){
+    document.getElementById('login-area').innerHTML = `<div class="error-box">Anmeldung fehlgeschlagen: ${escapeHtml(err.message)}</div>
+      <button class="btn btn-primary" style="margin-top:10px;" onclick="login()">Erneut versuchen</button>`;
+  }
+})();
+</script>
+</body>
+</html>
