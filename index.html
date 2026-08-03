@@ -16,13 +16,14 @@
     --line: rgba(0,0,0,0.15);
     --shadow: rgba(0,0,0,0.25);
   }
-  *{box-sizing:border-box;}
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   body{
     margin:0;
     font-family: 'Segoe UI', system-ui, sans-serif;
     background: var(--bg);
     color: var(--ink);
     min-height:100vh;
+    overscroll-behavior-y: contain;
   }
   header{
     display:flex; flex-direction:column; gap:8px;
@@ -36,7 +37,7 @@
     padding:5px 12px; border-radius:6px; border:1px solid var(--line);
     background:transparent; cursor:pointer; font-size:0.85rem; color:var(--ink);
   }
-  .board-tab.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .board-tab.active{color:#fff;}
   .board-tab-add{
     width:26px; height:26px; border-radius:6px; border:1px solid var(--line);
     background:transparent; cursor:pointer; font-size:1rem; line-height:1; color:var(--ink);
@@ -48,23 +49,9 @@
   }
   .board-tab-settings:hover{opacity:1;}
   .color-swatches{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0;}
-  .color-swatch{
-    width:32px; height:32px; border-radius:50%; cursor:pointer; border:2px solid transparent;
-  }
+  .color-swatch{width:32px; height:32px; border-radius:50%; cursor:pointer; border:2px solid transparent;}
   .color-swatch.selected{border-color:#000;}
 
-  .note{position:relative;}
-  .note .note-actions{
-    position:absolute; top:6px; right:6px; display:flex; gap:4px; opacity:0; transition:opacity 0.15s;
-  }
-  .note:hover .note-actions{opacity:1;}
-  .note .note-actions button{
-    background:rgba(255,255,255,0.12); border:none; border-radius:4px; cursor:pointer;
-    font-size:0.75rem; color:#fff; padding:2px 5px;
-  }
-  .note .note-actions button:hover{background:rgba(255,255,255,0.25);}
-  .note.dragging{opacity:0.4;}
-  .note{cursor:grab;}
   .user-chip{display:flex; align-items:center; gap:6px; font-size:0.85rem; opacity:0.85;}
   .btn{border:none; border-radius:6px; padding:8px 16px; font-size:0.9rem; cursor:pointer; font-weight:600;}
   .btn:active{transform:scale(0.98);}
@@ -77,23 +64,26 @@
   #login-screen p{max-width:420px; color:var(--ink); opacity:0.8; line-height:1.5;}
   .error-box{background:#fff; border:1px solid #b23; color:#7a2318; padding:10px 14px; border-radius:6px; font-size:0.85rem; margin-top:14px; text-align:left; max-width:440px;}
 
-  #setup-screen{max-width:420px; margin:60px auto; background:#fff; padding:24px; border-radius:8px; display:none;}
-  #setup-screen input{width:100%; padding:9px 10px; border-radius:6px; border:1px solid #ccc; font-size:0.95rem; margin:10px 0;}
+  #setup-screen{max-width:420px; margin:60px auto; background:#fff; padding:24px; border-radius:8px; display:none; text-align:center;}
+  #setup-screen p{font-size:0.9rem; opacity:0.8; text-align:left;}
 
   #board{display:none; padding:24px; max-width:1400px; margin:0 auto;}
   .board-grid{display:flex; flex-wrap:wrap; align-content:flex-start; gap:12px; padding-bottom:100px;}
   .note{
     background:var(--card-bg); color:var(--card-text); border-radius:5px; padding:10px 12px;
     display:flex; flex-direction:column; font-size:0.9rem; line-height:1.4; word-break:break-word;
-    width:fit-content; max-width:230px; min-width:110px;
+    width:fit-content; max-width:230px; min-width:110px; position:relative; touch-action:pan-y;
   }
-  .note img{max-width:100%; border-radius:3px; margin-bottom:6px; display:block; min-height:40px; background:#2a2a2a;}
+  .note img{max-width:100%; border-radius:3px; margin-bottom:6px; display:block; min-height:40px; background:#2a2a2a; pointer-events:none;}
   .note .note-text{flex:1; white-space:pre-wrap;}
   .note a.note-link{color:#8fc6ff; font-weight:600; word-break:break-all;}
   .note .note-file-link{display:inline-block; margin-top:4px; padding:4px 8px; background:#2a2a2a; border-radius:4px; font-size:0.8rem; cursor:pointer; color:#fff;}
-  .note .meta{margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.12); font-size:0.7rem; opacity:0.6; display:flex; justify-content:space-between; align-items:center; gap:8px;}
-  .note .del-btn{background:none; border:none; cursor:pointer; opacity:0.5; font-size:0.85rem; color:#fff;}
-  .note .del-btn:hover{opacity:1;}
+  .note .note-actions{position:absolute; top:6px; right:6px; display:flex; gap:4px; opacity:0.55; transition:opacity 0.15s;}
+  .note:hover .note-actions{opacity:1;}
+  .note .note-actions button{background:rgba(255,255,255,0.15); border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; color:#fff; padding:3px 6px;}
+  .note .note-actions button:hover{background:rgba(255,255,255,0.3);}
+  .note.drag-placeholder{background:transparent; border:2px dashed rgba(0,0,0,0.35); box-shadow:none;}
+  .drag-ghost{position:fixed; z-index:200; pointer-events:none; box-shadow:0 10px 24px rgba(0,0,0,0.45); transform:scale(1.04); opacity:0.97;}
 
   .fab{position:fixed; bottom:24px; right:24px; width:52px; height:52px; border-radius:50%; background:var(--accent); color:#fff; font-size:1.6rem; border:none; cursor:pointer; box-shadow:0 4px 10px var(--shadow); z-index:60;}
 
@@ -101,7 +91,7 @@
   .modal{background:#fff; border-radius:10px; padding:22px; width:100%; max-width:420px;}
   .modal h3{margin-top:0; font-size:1.1rem; font-weight:600;}
   .type-tabs{display:flex; gap:6px; margin-bottom:14px;}
-  .type-tab{flex:1; padding:7px; text-align:center; border-radius:6px; border:1px solid #ccc; cursor:pointer; font-size:0.8rem; background:#fff;}
+  .type-tab{flex:1; padding:10px; text-align:center; border-radius:6px; border:1px solid #ccc; cursor:pointer; font-size:1.3rem; background:#fff; line-height:1;}
   .type-tab.active{background:var(--accent); color:#fff; border-color:var(--accent);}
   .modal textarea, .modal input[type=text], .modal input[type=url]{width:100%; padding:9px; border-radius:6px; border:1px solid #ccc; font-size:0.9rem; font-family:inherit; margin-bottom:10px;}
   .modal textarea{min-height:80px; resize:vertical;}
@@ -133,11 +123,17 @@
 </div>
 
 <div id="setup-screen">
-  <h2 style="margin-top:0;font-family:Georgia,serif;">Ordner verbinden</h2>
-  <p style="font-size:0.9rem;opacity:0.8;">Wie heißt der gemeinsame OneDrive-Ordner? (Muss entweder in deinem eigenen OneDrive liegen oder mit dir geteilt worden sein.)</p>
-  <input type="text" id="folder-name-input" value="FamilyBoard" placeholder="Ordnername">
-  <button class="btn btn-primary" style="width:100%;" onclick="connectFolder()">Verbinden</button>
-  <div id="setup-error"></div>
+  <div id="setup-connect">
+    <h2>Verbinden</h2>
+    <p>Es wird ein Ordner namens <strong>"Boards"</strong> in deinem OneDrive gesucht (oder angelegt, falls er noch nicht existiert). Alle einzelnen Boards liegen als Unterordner darin. Teile später einfach diesen einen "Boards"-Ordner mit deinem Team.</p>
+    <button class="btn btn-primary" style="width:100%;" onclick="connectContainer()">Verbinden</button>
+    <div id="setup-error"></div>
+  </div>
+  <div id="setup-nofirst" style="display:none;">
+    <h2>Erstes Board erstellen</h2>
+    <p>Im "Boards"-Ordner gibt es noch kein Board. Gib einen Titel ein, dann wird dafür automatisch ein Unterordner angelegt.</p>
+    <button class="btn btn-primary" style="width:100%;" onclick="openAddBoardModal()">Board erstellen</button>
+  </div>
 </div>
 
 <div id="board"><div id="board-grid" class="board-grid"></div></div>
@@ -148,10 +144,10 @@
   <div class="modal">
     <h3 id="note-modal-title">Neue Notiz</h3>
     <div class="type-tabs">
-      <div class="type-tab active" data-type="text" onclick="setNoteType('text')">📝 Text</div>
-      <div class="type-tab" data-type="link" onclick="setNoteType('link')">🔗 Link</div>
-      <div class="type-tab" data-type="image" onclick="setNoteType('image')">🖼️ Bild</div>
-      <div class="type-tab" data-type="file" onclick="setNoteType('file')">📎 Datei</div>
+      <div class="type-tab active" data-type="text" onclick="setNoteType('text')" title="Text">📝</div>
+      <div class="type-tab" data-type="link" onclick="setNoteType('link')" title="Link">🔗</div>
+      <div class="type-tab" data-type="image" onclick="setNoteType('image')" title="Bild">🖼️</div>
+      <div class="type-tab" data-type="file" onclick="setNoteType('file')" title="Datei">📎</div>
     </div>
     <div id="field-text"><textarea id="input-text" placeholder="Was möchtest du teilen?"></textarea></div>
     <div id="field-link" style="display:none;">
@@ -177,14 +173,14 @@
 
 <div class="modal-overlay" id="board-modal">
   <div class="modal">
-    <h3 id="board-modal-title">Board hinzufügen</h3>
-    <input type="text" id="board-name-input" placeholder="Ordnername (z.B. FamilyBoard)">
-    <div class="hint">Muss in deinem OneDrive existieren oder mit dir geteilt sein.</div>
+    <h3 id="board-modal-title">Board erstellen</h3>
+    <input type="text" id="board-name-input" placeholder="Titel des Boards">
+    <div class="hint" id="board-modal-hint">Es wird ein neuer Unterordner mit diesem Namen in "Boards" angelegt.</div>
     <div class="color-swatches" id="board-color-swatches"></div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" id="board-delete-btn" style="display:none; margin-right:auto; color:#b23;" onclick="deleteBoard()">Board entfernen</button>
+      <button class="btn btn-secondary" id="board-delete-btn" style="display:none; margin-right:auto; color:#b23;" onclick="deleteBoard()">Board löschen</button>
       <button class="btn btn-secondary" onclick="closeBoardModal()">Abbrechen</button>
-      <button class="btn btn-primary" id="board-save-btn" onclick="saveBoardModal()">Hinzufügen</button>
+      <button class="btn btn-primary" id="board-save-btn" onclick="saveBoardModal()">Erstellen</button>
     </div>
   </div>
 </div>
@@ -192,19 +188,19 @@
 <script>
 // ============ KONFIGURATION ============
 const CLIENT_ID = '482edec5-c2bf-49db-85bf-cbd5ebfa1989';
-const REDIRECT_URI = 'https://sigekaspar.github.io/familyboard/'; // muss exakt der Azure-Redirect-URI entsprechen
+const REDIRECT_URI = 'https://sigekaspar.github.io/familyboard/';
 const SCOPES = ['Files.ReadWrite', 'offline_access', 'User.Read'];
 const GRAPH = 'https://graph.microsoft.com/v1.0';
+const CONTAINER_NAME = 'Boards';
 const ATTACH_SUBFOLDER = 'anhaenge';
 const ORDER_FILE = '_order.json';
-const BOARD_COLORS = ['#d9a827','#4a90d9','#5cb85c','#c1443a','#7a5c8e','#e07b39','#2c2c2c'];
+const BOARD_COLORS = [
+  '#d9a827','#4a90d9','#5cb85c','#c1443a','#7a5c8e','#e07b39','#2c2c2c',
+  '#2f9e8f','#d94f92','#8bc34a','#5c6bc0','#c9c9c9'
+];
 
 const msalConfig = {
-  auth: {
-    clientId: CLIENT_ID,
-    authority: 'https://login.microsoftonline.com/consumers',
-    redirectUri: REDIRECT_URI
-  },
+  auth: { clientId: CLIENT_ID, authority: 'https://login.microsoftonline.com/consumers', redirectUri: REDIRECT_URI },
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false }
 };
 let msalInstance = null;
@@ -214,21 +210,20 @@ try{
     throw new Error('Die Anmelde-Bibliothek (MSAL) von Microsoft konnte nicht geladen werden. Prüfe deine Internetverbindung oder ob ein Werbeblocker/Firewall alcdn.msauth.net blockiert.');
   }
   msalInstance = new msal.PublicClientApplication(msalConfig);
-}catch(e){
-  msalInitError = e;
-  console.error('MSAL init failed:', e);
-}
+}catch(e){ msalInitError = e; console.error('MSAL init failed:', e); }
 
 let me = { name:null, email:null, account:null };
+let containerRef = null; // {driveId, itemId}
 let boardRef = { driveId:null, itemId:null, folderName:null, color:null };
 let boardsList = [];
 let notesById = {};
 let noteOrder = [];
+let imageCache = {}; // attachmentPath -> objectURL
 let deltaLink = null;
 let currentNoteType = 'text';
 let editingNoteId = null;
 let pollTimer = null;
-let boardModalMode = 'add'; // 'add' | 'edit'
+let boardModalMode = 'add';
 let boardModalColor = BOARD_COLORS[0];
 
 function showStatus(msg, ms=2500){
@@ -236,8 +231,6 @@ function showStatus(msg, ms=2500){
   el.textContent = msg; el.classList.add('show');
   clearTimeout(el._t); el._t = setTimeout(()=>el.classList.remove('show'), ms);
 }
-
-// ---------- Persistent, non-token metadata (Claude storage not used here since this runs on GitHub Pages, not as a Claude artifact) ----------
 function localGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
 function localSet(key,val){ try{ localStorage.setItem(key,val); }catch(e){} }
 
@@ -248,27 +241,18 @@ async function login(){
       <button class="btn btn-primary" style="margin-top:10px;" onclick="location.reload()">Seite neu laden</button>`;
     return;
   }
-  try{
-    await msalInstance.loginRedirect({ scopes: SCOPES });
-  }catch(err){
+  try{ await msalInstance.loginRedirect({ scopes: SCOPES }); }
+  catch(err){
     document.getElementById('login-area').innerHTML = `<div class="error-box">Login konnte nicht gestartet werden: ${escapeHtml(err.message)}</div>
       <button class="btn btn-primary" style="margin-top:10px;" onclick="login()">Erneut versuchen</button>`;
   }
 }
-
 async function getAccessToken(){
   const account = me.account || msalInstance.getAllAccounts()[0];
   if(!account) throw new Error('Nicht angemeldet');
-  try{
-    const result = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account });
-    return result.accessToken;
-  }catch(e){
-    // Silent refresh failed (e.g. token/session expired) -> interactive fallback
-    await msalInstance.acquireTokenRedirect({ scopes: SCOPES, account });
-    throw new Error('redirecting_for_reauth');
-  }
+  try{ const result = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account }); return result.accessToken; }
+  catch(e){ await msalInstance.acquireTokenRedirect({ scopes: SCOPES, account }); throw new Error('redirecting_for_reauth'); }
 }
-
 async function graphFetch(path, options={}){
   const token = await getAccessToken();
   const url = path.startsWith('http') ? path : GRAPH + path;
@@ -284,51 +268,75 @@ async function graphFetchRaw(path, options={}){
   return res;
 }
 
-// ---------- Folder resolution ----------
-async function resolveFolderByName(name){
-  let driveId, itemId;
+// ---------- Container ("Boards" Ordner) ----------
+async function connectContainer(){
+  const errEl = document.getElementById('setup-error');
+  errEl.innerHTML = '';
   try{
-    const item = await graphFetch(`/me/drive/root:/${encodeURIComponent(name)}`);
-    driveId = item.parentReference.driveId; itemId = item.id;
-  }catch(e404){
-    const shared = await graphFetch('/me/drive/sharedWithMe');
-    const match = (shared.value||[]).find(it => it.name === name);
-    if(!match) throw new Error('not_found');
-    driveId = match.remoteItem.parentReference.driveId; itemId = match.remoteItem.id;
+    let driveId, itemId;
+    try{
+      const item = await graphFetch(`/me/drive/root:/${CONTAINER_NAME}`);
+      driveId = item.parentReference.driveId; itemId = item.id;
+    }catch(e404){
+      const shared = await graphFetch('/me/drive/sharedWithMe');
+      const match = (shared.value||[]).find(it => it.name === CONTAINER_NAME);
+      if(match){
+        driveId = match.remoteItem.parentReference.driveId; itemId = match.remoteItem.id;
+      } else {
+        const created = await graphFetch('/me/drive/root/children', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name:CONTAINER_NAME, folder:{}, '@microsoft.graph.conflictBehavior':'fail' })
+        });
+        driveId = created.parentReference.driveId; itemId = created.id;
+      }
+    }
+    containerRef = { driveId, itemId };
+    localSet('container_ref', JSON.stringify(containerRef));
+    await refreshBoardsList();
+    document.getElementById('login-screen').style.display = 'none';
+    if(boardsList.length){
+      const activeName = localGet('active_board_name');
+      boardRef = boardsList.find(b=>b.folderName===activeName) || boardsList[0];
+      startBoard();
+    } else {
+      document.getElementById('setup-connect').style.display = 'none';
+      document.getElementById('setup-nofirst').style.display = 'block';
+      document.getElementById('setup-screen').style.display = 'block';
+    }
+  }catch(err){
+    errEl.innerHTML = `<div class="error-box">Verbindung fehlgeschlagen: ${escapeHtml(err.message)}</div>`;
   }
-  return { driveId, itemId, folderName:name };
 }
 
-function saveBoardsList(){ localSet('boards_list', JSON.stringify(boardsList)); }
+async function refreshBoardsList(){
+  const res = await graphFetch(`/drives/${containerRef.driveId}/items/${containerRef.itemId}/children?$select=id,name,folder`);
+  const folders = (res.value||[]).filter(it=>it.folder);
+  const colorMap = JSON.parse(localGet('board_colors')||'{}');
+  boardsList = folders.map(f=>{
+    if(!colorMap[f.name]) colorMap[f.name] = BOARD_COLORS[Object.keys(colorMap).length % BOARD_COLORS.length];
+    return { folderName:f.name, itemId:f.id, driveId:containerRef.driveId, color:colorMap[f.name] };
+  });
+  localSet('board_colors', JSON.stringify(colorMap));
+  return boardsList;
+}
+function saveBoardColor(name, color){
+  const colorMap = JSON.parse(localGet('board_colors')||'{}');
+  colorMap[name] = color;
+  localSet('board_colors', JSON.stringify(colorMap));
+}
 function nextUnusedColor(){
   const used = boardsList.map(b=>b.color);
   return BOARD_COLORS.find(c=>!used.includes(c)) || BOARD_COLORS[0];
 }
-function applyBoardColor(){
-  document.documentElement.style.setProperty('--bg', boardRef.color || BOARD_COLORS[0]);
-}
+function applyBoardColor(){ document.documentElement.style.setProperty('--bg', boardRef.color || BOARD_COLORS[0]); }
 
-async function connectFolder(){
-  const name = document.getElementById('folder-name-input').value.trim();
-  const errEl = document.getElementById('setup-error');
-  errEl.innerHTML = '';
-  if(!name) return;
-  try{
-    const ref = await resolveFolderByName(name);
-    ref.color = BOARD_COLORS[0];
-    boardsList = [ref];
-    saveBoardsList();
-    boardRef = ref;
-    localSet('active_board_name', name);
-    applyBoardColor();
-    await ensureAttachSubfolder();
-    startBoard();
-  }catch(err){
-    errEl.innerHTML = `<div class="error-box">
-      Ordner "${escapeHtml(name)}" wurde nicht gefunden — weder in deinem eigenen OneDrive
-      noch unter "Für dich freigegeben". Prüfe: existiert der Ordner? Wurde er mit deinem
-      Microsoft-Konto (${escapeHtml(me.email||'')}) geteilt (Bearbeiten-Berechtigung)?
-    </div>`;
+async function ensureAttachSubfolder(){
+  try{ await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}`); }
+  catch(e){
+    await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}/children`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name:ATTACH_SUBFOLDER, folder:{}, '@microsoft.graph.conflictBehavior':'rename' })
+    }).catch(()=>{});
   }
 }
 
@@ -340,17 +348,18 @@ function renderColorSwatches(){
   ).join('');
 }
 function pickBoardColor(c){ boardModalColor = c; renderColorSwatches(); }
-
 function openAddBoardModal(){
   boardModalMode = 'add';
   boardModalColor = nextUnusedColor();
-  document.getElementById('board-modal-title').textContent = 'Board hinzufügen';
+  document.getElementById('board-modal-title').textContent = 'Board erstellen';
+  document.getElementById('board-modal-hint').textContent = 'Es wird ein neuer Unterordner mit diesem Namen in "Boards" angelegt.';
   document.getElementById('board-name-input').value = '';
   document.getElementById('board-name-input').disabled = false;
-  document.getElementById('board-save-btn').textContent = 'Hinzufügen';
+  document.getElementById('board-save-btn').textContent = 'Erstellen';
   document.getElementById('board-delete-btn').style.display = 'none';
   renderColorSwatches();
   document.getElementById('board-modal').style.display = 'flex';
+  setTimeout(()=>document.getElementById('board-name-input').focus(), 50);
 }
 function openEditBoardModal(folderName){
   const b = boardsList.find(x=>x.folderName===folderName);
@@ -358,6 +367,7 @@ function openEditBoardModal(folderName){
   boardModalMode = 'edit';
   boardModalColor = b.color || BOARD_COLORS[0];
   document.getElementById('board-modal-title').textContent = 'Board bearbeiten';
+  document.getElementById('board-modal-hint').textContent = 'Der Name kann hier nicht geändert werden (dazu den Ordner in OneDrive umbenennen).';
   document.getElementById('board-name-input').value = b.folderName;
   document.getElementById('board-name-input').disabled = true;
   document.getElementById('board-save-btn').textContent = 'Speichern';
@@ -373,34 +383,45 @@ async function saveBoardModal(){
   if(boardModalMode === 'add'){
     if(boardsList.some(b=>b.folderName===name)){ showStatus('Board existiert schon'); closeBoardModal(); switchBoard(name); return; }
     try{
-      const ref = await resolveFolderByName(name);
-      ref.color = boardModalColor;
-      boardsList.push(ref);
-      saveBoardsList();
+      await graphFetch(`/drives/${containerRef.driveId}/items/${containerRef.itemId}/children`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ name, folder:{}, '@microsoft.graph.conflictBehavior':'fail' })
+      });
+      saveBoardColor(name, boardModalColor);
+      await refreshBoardsList();
       closeBoardModal();
+      document.getElementById('setup-screen').style.display = 'none';
       await switchBoard(name);
+      document.getElementById('board').style.display = 'block';
+      document.getElementById('fab-add').style.display = 'block';
     }catch(err){
-      alert(`Ordner "${name}" wurde nicht gefunden — existiert er in deinem OneDrive oder wurde er mit dir geteilt?`);
+      alert(`Board "${name}" konnte nicht erstellt werden (existiert es evtl. schon?): ${err.message}`);
     }
   } else {
+    saveBoardColor(name, boardModalColor);
     const b = boardsList.find(x=>x.folderName===name);
-    if(b){ b.color = boardModalColor; saveBoardsList(); if(boardRef.folderName===name){ boardRef.color = boardModalColor; applyBoardColor(); } renderBoardTabs(); }
+    if(b){ b.color = boardModalColor; if(boardRef.folderName===name){ boardRef.color = boardModalColor; applyBoardColor(); } renderBoardTabs(); }
     closeBoardModal();
   }
 }
 async function deleteBoard(){
   const name = document.getElementById('board-name-input').value.trim();
-  if(!confirm(`Board "${name}" wirklich aus dieser App entfernen? (Der OneDrive-Ordner selbst bleibt unangetastet, nur die Verknüpfung hier wird entfernt.)`)) return;
-  boardsList = boardsList.filter(b=>b.folderName!==name);
-  saveBoardsList();
-  closeBoardModal();
-  if(boardsList.length){
-    await switchBoard(boardsList[0].folderName);
-  } else {
-    document.getElementById('board').style.display = 'none';
-    document.getElementById('fab-add').style.display = 'none';
-    document.getElementById('setup-screen').style.display = 'block';
-  }
+  const b = boardsList.find(x=>x.folderName===name);
+  if(!b) return;
+  if(!confirm(`Board "${name}" WIRKLICH löschen? Der Ordner samt Inhalt wird in OneDrive gelöscht (landet im Papierkorb, ca. 30 Tage wiederherstellbar).`)) return;
+  try{
+    await graphFetchRaw(`/drives/${b.driveId}/items/${b.itemId}`, { method:'DELETE' });
+    closeBoardModal();
+    await refreshBoardsList();
+    if(boardsList.length){
+      await switchBoard(boardsList[0].folderName);
+    } else {
+      document.getElementById('board').style.display = 'none';
+      document.getElementById('fab-add').style.display = 'none';
+      document.getElementById('setup-nofirst').style.display = 'block';
+      document.getElementById('setup-screen').style.display = 'block';
+    }
+  }catch(err){ alert('Löschen fehlgeschlagen: '+err.message); }
 }
 
 async function switchBoard(name){
@@ -408,13 +429,12 @@ async function switchBoard(name){
   if(!ref) return;
   boardRef = ref;
   localSet('active_board_name', name);
-  notesById = {}; deltaLink = null; noteOrder = [];
+  notesById = {}; deltaLink = null; noteOrder = []; imageCache = {};
   applyBoardColor();
   renderBoardTabs();
   await ensureAttachSubfolder();
   await fullLoadNotes();
 }
-
 function renderBoardTabs(){
   const el = document.getElementById('board-tabs');
   if(!boardsList.length){ el.style.display='none'; return; }
@@ -426,17 +446,8 @@ function renderBoardTabs(){
     </div>`
   ).join('') + `<button class="board-tab-add" onclick="openAddBoardModal()" title="Neues Board hinzufügen">+</button>`;
 }
-async function ensureAttachSubfolder(){
-  try{ await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}`); }
-  catch(e){
-    await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}/children`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name:ATTACH_SUBFOLDER, folder:{}, '@microsoft.graph.conflictBehavior':'rename' })
-    }).catch(()=>{});
-  }
-}
 
-// ---------- Board ----------
+// ---------- Board content ----------
 function renderHeader(){
   document.getElementById('header-right').innerHTML = `<div class="user-chip">${escapeHtml(me.name||me.email||'')}</div>`;
 }
@@ -451,6 +462,15 @@ async function startBoard(){
   if(pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(pollDelta, 15000);
 }
+
+function notesSignature(){
+  const parts = Object.keys(notesById).sort().map(k=>{
+    const n = notesById[k];
+    return [k, n.type, n.text, n.url, n.attachmentPath].join('~');
+  });
+  return parts.join('|') + '##' + noteOrder.join(',');
+}
+
 async function fullLoadNotes(){
   try{
     const res = await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}/delta`);
@@ -463,6 +483,45 @@ async function fullLoadNotes(){
     renderBoard();
   }catch(err){
     document.getElementById('board-grid').innerHTML = `<div class="error-box">Notizen konnten nicht geladen werden: ${escapeHtml(err.message)}</div>`;
+  }
+}
+async function pollDelta(){
+  if(drag && drag.active) return; // während einer aktiven Verschiebung nicht neu rendern
+  if(!deltaLink) return fullLoadNotes();
+  try{
+    const sigBefore = notesSignature();
+    const res = await graphFetch(deltaLink);
+    let items = res.value || [];
+    let link = res['@odata.deltaLink'] || deltaLink;
+    let next = res['@odata.nextLink'];
+    while(next){ const r2 = await graphFetch(next); items = items.concat(r2.value||[]); link = r2['@odata.deltaLink']||link; next = r2['@odata.nextLink']; }
+    deltaLink = link;
+    if(items.length){
+      await processDeltaItems(items);
+      if(notesSignature() !== sigBefore) renderBoard();
+    }
+  }catch(err){ console.warn('delta poll failed', err); fullLoadNotes(); }
+}
+async function processDeltaItems(items){
+  for(const item of items){
+    if(item.folder) continue;
+    if(item.name === ORDER_FILE){
+      if(!item.deleted){
+        try{
+          const r = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${item.id}/content`);
+          const data = await r.json();
+          noteOrder = data.order || [];
+        }catch(e){}
+      }
+      continue;
+    }
+    if(item.deleted){ delete notesById[item.id]; continue; }
+    if(!item.name || !item.name.startsWith('note_') || !item.name.endsWith('.json')) continue;
+    try{
+      const contentRes = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${item.id}/content`);
+      const noteData = await contentRes.json();
+      notesById[item.id] = { fileId:item.id, ...noteData };
+    }catch(e){ console.warn('could not read note', item.name, e); }
   }
 }
 async function loadOrder(){
@@ -479,30 +538,7 @@ async function saveOrder(){
     });
   }catch(e){ console.warn('order save failed', e); }
 }
-async function pollDelta(){
-  if(!deltaLink) return fullLoadNotes();
-  try{
-    const res = await graphFetch(deltaLink);
-    let items = res.value || [];
-    let link = res['@odata.deltaLink'] || deltaLink;
-    let next = res['@odata.nextLink'];
-    while(next){ const r2 = await graphFetch(next); items = items.concat(r2.value||[]); link = r2['@odata.deltaLink']||link; next = r2['@odata.nextLink']; }
-    deltaLink = link;
-    if(items.length){ await processDeltaItems(items); renderBoard(); }
-  }catch(err){ console.warn('delta poll failed', err); fullLoadNotes(); }
-}
-async function processDeltaItems(items){
-  for(const item of items){
-    if(item.folder) continue;
-    if(item.deleted){ delete notesById[item.id]; continue; }
-    if(!item.name || !item.name.startsWith('note_') || !item.name.endsWith('.json')) continue;
-    try{
-      const contentRes = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${item.id}/content`);
-      const noteData = await contentRes.json();
-      notesById[item.id] = { fileId:item.id, ...noteData };
-    }catch(e){ console.warn('could not read note', item.name, e); }
-  }
-}
+
 function orderedNotes(){
   const all = Object.values(notesById);
   const byId = {}; all.forEach(n=>byId[n.fileId]=n);
@@ -512,6 +548,7 @@ function orderedNotes(){
   if(missing.length){ noteOrder = result.map(n=>n.fileId); saveOrder(); }
   return result;
 }
+
 function renderBoard(){
   const grid = document.getElementById('board-grid');
   const notes = orderedNotes();
@@ -520,27 +557,11 @@ function renderBoard(){
   observeImages();
   attachDragHandlers();
 }
-let dragSourceId = null;
-function attachDragHandlers(){
-  document.querySelectorAll('.note[data-id]').forEach(el=>{
-    el.addEventListener('dragstart', ()=>{ dragSourceId = el.dataset.id; el.classList.add('dragging'); });
-    el.addEventListener('dragend', ()=>{ el.classList.remove('dragging'); });
-    el.addEventListener('dragover', (e)=>{ e.preventDefault(); });
-    el.addEventListener('drop', (e)=>{
-      e.preventDefault();
-      const targetId = el.dataset.id;
-      if(!dragSourceId || dragSourceId===targetId) return;
-      const ids = noteOrder.length ? noteOrder.slice() : Object.keys(notesById);
-      const from = ids.indexOf(dragSourceId), to = ids.indexOf(targetId);
-      if(from===-1 || to===-1) return;
-      ids.splice(from,1); ids.splice(to,0,dragSourceId);
-      noteOrder = ids;
-      saveOrder();
-      renderBoard();
-    });
-  });
-}
 function renderNote(n){
+  const isPlaceholder = drag && drag.active && drag.id === n.fileId;
+  if(isPlaceholder){
+    return `<div class="note drag-placeholder" data-id="${n.fileId}" style="width:${drag.width}px;height:${drag.height}px;"></div>`;
+  }
   const canEdit = n.authorEmail === me.email;
   let body = '';
   if(n.type === 'text'){
@@ -548,14 +569,16 @@ function renderNote(n){
   } else if(n.type === 'link'){
     body = `<div class="note-text">${n.text?escapeHtml(n.text)+'<br>':''}<a class="note-link" href="${escapeAttr(n.url)}" target="_blank" rel="noopener">${escapeHtml(n.url||'')}</a></div>`;
   } else if(n.type === 'image'){
-    body = `<img loading="lazy" alt="${escapeAttr(n.attachmentName||'Bild')}" data-lazy="${n.attachmentPath}">
-      ${n.text?`<div class="note-text">${escapeHtml(n.text)}</div>`:''}`;
+    const cached = imageCache[n.attachmentPath];
+    body = cached
+      ? `<img alt="${escapeAttr(n.attachmentName||'Bild')}" src="${cached}">${n.text?`<div class="note-text">${escapeHtml(n.text)}</div>`:''}`
+      : `<img loading="lazy" alt="${escapeAttr(n.attachmentName||'Bild')}" data-lazy="${n.attachmentPath}">${n.text?`<div class="note-text">${escapeHtml(n.text)}</div>`:''}`;
   } else if(n.type === 'file'){
     body = `<div class="note-text">📎 ${escapeHtml(n.attachmentName||'Datei')}
       <br><span class="note-file-link" onclick="downloadAttachment('${n.attachmentPath}','${escapeAttr(n.attachmentName||'datei')}')">Herunterladen</span></div>
       ${n.text?`<div class="note-text">${escapeHtml(n.text)}</div>`:''}`;
   }
-  return `<div class="note" draggable="true" data-id="${n.fileId}">
+  return `<div class="note" data-id="${n.fileId}">
     ${canEdit?`<div class="note-actions">
       <button onclick="openEditNoteModal('${n.fileId}')" title="Bearbeiten">✎</button>
       <button onclick="deleteNote('${n.fileId}')" title="Löschen">🗑</button>
@@ -563,6 +586,7 @@ function renderNote(n){
     ${body}
   </div>`;
 }
+
 const imgObserver = new IntersectionObserver(async (entries)=>{
   for(const entry of entries){
     if(entry.isIntersecting){
@@ -570,7 +594,10 @@ const imgObserver = new IntersectionObserver(async (entries)=>{
       if(path && !img.src){
         try{
           const res = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
-          const blob = await res.blob(); img.src = URL.createObjectURL(blob);
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          imageCache[path] = url;
+          img.src = url;
         }catch(e){ console.warn('image load failed', e); }
       }
       imgObserver.unobserve(img);
@@ -578,6 +605,7 @@ const imgObserver = new IntersectionObserver(async (entries)=>{
   }
 });
 function observeImages(){ document.querySelectorAll('.note img[data-lazy]').forEach(img=>imgObserver.observe(img)); }
+
 async function downloadAttachment(path, filename){
   try{
     const res = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
@@ -596,12 +624,100 @@ async function deleteNote(fileId){
   }catch(e){ showStatus('Löschen fehlgeschlagen'); }
 }
 
+// ---------- Drag & Drop Reorder (Maus + Touch via Pointer Events) ----------
+let drag = null;
+function attachDragHandlers(){
+  document.querySelectorAll('.note[data-id]').forEach(el=>{
+    el.addEventListener('pointerdown', onNotePointerDown);
+  });
+}
+function onNotePointerDown(e){
+  if(e.target.closest('button') || e.target.closest('a')) return;
+  const el = e.currentTarget;
+  drag = { id:el.dataset.id, startX:e.clientX, startY:e.clientY, pointerType:e.pointerType, active:false };
+  if(e.pointerType === 'touch'){
+    drag.longPressTimer = setTimeout(()=>activateDrag(e, el), 160);
+  }
+  document.addEventListener('pointermove', onPointerMove);
+  document.addEventListener('pointerup', onPointerUp);
+  document.addEventListener('pointercancel', onPointerUp);
+}
+function activateDrag(e, el){
+  if(!drag || drag.active) return;
+  drag.active = true;
+  const rect = el.getBoundingClientRect();
+  drag.offsetX = e.clientX - rect.left; drag.offsetY = e.clientY - rect.top;
+  drag.width = rect.width; drag.height = rect.height;
+  const ghost = el.cloneNode(true);
+  ghost.classList.add('drag-ghost');
+  ghost.classList.remove('note-hover');
+  ghost.style.width = rect.width+'px';
+  ghost.style.left = rect.left+'px';
+  ghost.style.top = rect.top+'px';
+  ghost.style.margin = '0';
+  document.body.appendChild(ghost);
+  drag.ghost = ghost;
+  document.body.style.userSelect = 'none';
+  renderBoard();
+}
+function onPointerMove(e){
+  if(!drag) return;
+  if(!drag.active){
+    const dx = e.clientX-drag.startX, dy = e.clientY-drag.startY;
+    if(drag.pointerType === 'mouse'){
+      if(Math.abs(dx)>4 || Math.abs(dy)>4){
+        const el = document.querySelector(`.note[data-id="${drag.id}"]`);
+        if(el) activateDrag(e, el);
+      }
+    } else {
+      if(Math.abs(dx)>10 || Math.abs(dy)>10){ endDrag(false); return; }
+    }
+    return;
+  }
+  e.preventDefault();
+  drag.ghost.style.left = (e.clientX - drag.offsetX)+'px';
+  drag.ghost.style.top = (e.clientY - drag.offsetY)+'px';
+  drag.ghost.style.pointerEvents = 'none';
+  const target = document.elementFromPoint(e.clientX, e.clientY);
+  const targetCard = target && target.closest('.note[data-id]');
+  if(targetCard && targetCard.dataset.id !== drag.id){
+    const targetId = targetCard.dataset.id;
+    const ids = noteOrder.length ? noteOrder.slice() : Object.values(notesById).map(n=>n.fileId);
+    const from = ids.indexOf(drag.id), to = ids.indexOf(targetId);
+    if(from!==-1 && to!==-1 && from!==to){
+      ids.splice(from,1); ids.splice(to,0,drag.id);
+      noteOrder = ids;
+      renderBoard();
+    }
+  }
+}
+function onPointerUp(e){ endDrag(true); }
+function endDrag(persist){
+  document.removeEventListener('pointermove', onPointerMove);
+  document.removeEventListener('pointerup', onPointerUp);
+  document.removeEventListener('pointercancel', onPointerUp);
+  if(!drag) return;
+  if(drag.longPressTimer) clearTimeout(drag.longPressTimer);
+  const wasActive = drag.active;
+  if(drag.ghost) drag.ghost.remove();
+  document.body.style.userSelect = '';
+  drag = null;
+  if(wasActive){ if(persist) saveOrder(); renderBoard(); }
+}
+
 // ---------- Add/edit note modal ----------
+function focusForType(type){
+  const map = { text:'input-text', link:'input-link', image:'input-image-note', file:'input-file-note' };
+  const el = document.getElementById(map[type]);
+  if(el) setTimeout(()=>el.focus(), 60);
+}
 function openAddModal(){
   editingNoteId = null;
   document.getElementById('note-modal-title').textContent = 'Neue Notiz';
   document.getElementById('save-note-btn').textContent = 'Anheften';
+  setNoteType('text');
   document.getElementById('add-modal').style.display = 'flex';
+  focusForType('text');
 }
 function openEditNoteModal(fileId){
   const n = notesById[fileId];
@@ -615,6 +731,7 @@ function openEditNoteModal(fileId){
   else if(n.type === 'image'){ document.getElementById('input-image-note').value = n.text||''; }
   else if(n.type === 'file'){ document.getElementById('input-file-note').value = n.text||''; }
   document.getElementById('add-modal').style.display = 'flex';
+  focusForType(n.type);
 }
 function closeAddModal(){
   document.getElementById('add-modal').style.display = 'none';
@@ -627,11 +744,12 @@ function setNoteType(type){
   currentNoteType = type;
   document.querySelectorAll('.type-tab').forEach(t=>t.classList.toggle('active', t.dataset.type===type));
   ['text','link','image','file'].forEach(t=>{ document.getElementById('field-'+t).style.display = (t===type)?'block':'none'; });
+  if(!editingNoteId) focusForType(type);
 }
 async function saveNote(){
   const btn = document.getElementById('save-note-btn');
   const isEdit = !!editingNoteId;
-  btn.disabled = true; btn.textContent = isEdit ? 'Speichert…' : 'Speichert…';
+  btn.disabled = true; btn.textContent = 'Speichert…';
   try{
     const existing = isEdit ? notesById[editingNoteId] : null;
     const id = existing ? existing.id : uuid();
@@ -651,25 +769,15 @@ async function saveNote(){
     } else if(currentNoteType === 'image'){
       const f = document.getElementById('input-image').files[0];
       note.text = document.getElementById('input-image-note').value.trim();
-      if(f){
-        note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name);
-        await uploadAttachment(f, note.attachmentPath);
-      } else if(existing && existing.attachmentPath){
-        note.attachmentName = existing.attachmentName; note.attachmentPath = existing.attachmentPath;
-      } else {
-        throw new Error('Bitte Bild auswählen.');
-      }
+      if(f){ note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name); await uploadAttachment(f, note.attachmentPath); }
+      else if(existing && existing.attachmentPath){ note.attachmentName = existing.attachmentName; note.attachmentPath = existing.attachmentPath; }
+      else { throw new Error('Bitte Bild auswählen.'); }
     } else if(currentNoteType === 'file'){
       const f = document.getElementById('input-file').files[0];
       note.text = document.getElementById('input-file-note').value.trim();
-      if(f){
-        note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name);
-        await uploadAttachment(f, note.attachmentPath);
-      } else if(existing && existing.attachmentPath){
-        note.attachmentName = existing.attachmentName; note.attachmentPath = existing.attachmentPath;
-      } else {
-        throw new Error('Bitte Datei auswählen.');
-      }
+      if(f){ note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name); await uploadAttachment(f, note.attachmentPath); }
+      else if(existing && existing.attachmentPath){ note.attachmentName = existing.attachmentName; note.attachmentPath = existing.attachmentPath; }
+      else { throw new Error('Bitte Datei auswählen.'); }
     }
     const created = await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/note_${id}.json:/content`, {
       method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(note)
@@ -680,7 +788,7 @@ async function saveNote(){
     renderBoard(); closeAddModal(); showStatus(isEdit ? 'Notiz gespeichert' : 'Notiz angeheftet');
   }catch(err){
     alert(err.message || 'Fehler beim Speichern');
-  }finally{ btn.disabled = false; btn.textContent = isEdit ? 'Speichern' : 'Anheften'; }
+  }finally{ btn.disabled = false; }
 }
 async function uploadAttachment(file, path){
   const encodedPath = encodeURIComponent(path);
@@ -711,7 +819,6 @@ function uuid(){ return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, 
 function sanitizeFilename(name){ return name.replace(/[^a-zA-Z0-9._-]/g,'_'); }
 function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeAttr(s){ return escapeHtml(s); }
-function hashCode(str){ let h=0; for(let i=0;i<(str||'').length;i++){ h=((h<<5)-h+str.charCodeAt(i))|0; } return Math.abs(h); }
 
 // ---------- boot ----------
 (async function boot(){
@@ -724,22 +831,24 @@ function hashCode(str){ let h=0; for(let i=0;i<(str||'').length;i++){ h=((h<<5)-
     const response = await msalInstance.handleRedirectPromise();
     let account = response ? response.account : msalInstance.getAllAccounts()[0];
     if(account){
-      me.account = account;
-      me.name = account.name;
-      me.email = account.username;
+      me.account = account; me.name = account.name; me.email = account.username;
       renderHeader();
       document.getElementById('login-screen').style.display = 'none';
-      const savedList = localGet('boards_list');
-      const activeName = localGet('active_board_name');
-      if(savedList){
+      const savedContainer = localGet('container_ref');
+      if(savedContainer){
         try{
-          boardsList = JSON.parse(savedList);
-          boardsList.forEach((b,i)=>{ if(!b.color) b.color = BOARD_COLORS[i % BOARD_COLORS.length]; });
-          saveBoardsList();
-          boardRef = boardsList.find(b=>b.folderName===activeName) || boardsList[0];
-          document.getElementById('folder-name-input').value = boardRef.folderName || 'FamilyBoard';
-          await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}`);
-          startBoard();
+          containerRef = JSON.parse(savedContainer);
+          await graphFetch(`/drives/${containerRef.driveId}/items/${containerRef.itemId}`);
+          await refreshBoardsList();
+          if(boardsList.length){
+            const activeName = localGet('active_board_name');
+            boardRef = boardsList.find(b=>b.folderName===activeName) || boardsList[0];
+            startBoard();
+          } else {
+            document.getElementById('setup-connect').style.display = 'none';
+            document.getElementById('setup-nofirst').style.display = 'block';
+            document.getElementById('setup-screen').style.display = 'block';
+          }
         }catch(e){ document.getElementById('setup-screen').style.display = 'block'; }
       } else {
         document.getElementById('setup-screen').style.display = 'block';
