@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Family Board</title>
-<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<script src="https://alcdn.msauth.net/browser/2.28.1/js/msal-browser.min.js" onerror="window.__msalLoadFailed=true"></script>
 <style>
   :root{
     --cork: #c9a876;
@@ -166,7 +166,17 @@ const msalConfig = {
   },
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: false }
 };
-const msalInstance = new msal.PublicClientApplication(msalConfig);
+let msalInstance = null;
+let msalInitError = null;
+try{
+  if(window.__msalLoadFailed || typeof msal === 'undefined'){
+    throw new Error('Die Anmelde-Bibliothek (MSAL) von Microsoft konnte nicht geladen werden. Prüfe deine Internetverbindung oder ob ein Werbeblocker/Firewall alcdn.msauth.net blockiert.');
+  }
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+}catch(e){
+  msalInitError = e;
+  console.error('MSAL init failed:', e);
+}
 
 let me = { name:null, email:null, account:null };
 let boardRef = { driveId:null, itemId:null, folderName:null };
@@ -188,6 +198,11 @@ function localSet(key,val){ try{ localStorage.setItem(key,val); }catch(e){} }
 
 // ---------- Auth ----------
 async function login(){
+  if(msalInitError){
+    document.getElementById('login-area').innerHTML = `<div class="error-box">${escapeHtml(msalInitError.message)}</div>
+      <button class="btn btn-primary" style="margin-top:10px;" onclick="location.reload()">Seite neu laden</button>`;
+    return;
+  }
   try{
     await msalInstance.loginRedirect({ scopes: SCOPES });
   }catch(err){
@@ -466,6 +481,11 @@ function hashCode(str){ let h=0; for(let i=0;i<(str||'').length;i++){ h=((h<<5)-
 
 // ---------- boot ----------
 (async function boot(){
+  if(msalInitError){
+    document.getElementById('login-area').innerHTML = `<div class="error-box">${escapeHtml(msalInitError.message)}</div>
+      <button class="btn btn-primary" style="margin-top:10px;" onclick="location.reload()">Seite neu laden</button>`;
+    return;
+  }
   try{
     const response = await msalInstance.handleRedirectPromise();
     let account = response ? response.account : msalInstance.getAllAccounts()[0];
