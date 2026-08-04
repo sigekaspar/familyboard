@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
 <title>Family Board</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
@@ -40,23 +40,23 @@
   }
   .header-top{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;}
   header h1{font-size:1.15rem; margin:0; font-weight:600; letter-spacing:0.2px; color:#000;}
-  .board-tabs{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
-  .board-tab-wrap{display:flex; align-items:stretch;}
+  .board-tabs{display:flex; align-items:center; gap:8px; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; padding-bottom:2px; scrollbar-width:thin;}
+  .board-tab-wrap{display:flex; align-items:stretch; flex:none;}
   .board-tab{
-    padding:5px 12px; border:1px solid var(--line);
+    padding:8px 14px; border:1px solid var(--line);
     background:#eee; cursor:pointer; font-size:0.85rem; color:#000;
-    border-radius:6px;
+    border-radius:6px; white-space:nowrap;
   }
   .board-tab-wrap.has-settings{ border-radius:6px; overflow:hidden; border:1px solid #000; }
   .board-tab-wrap.has-settings .board-tab{ border:none; border-radius:0; }
   .board-tab.active{background:#000; color:#fff; border-color:#000;}
   .board-tab-add{
-    width:26px; height:26px; border-radius:6px; border:1px solid var(--line);
-    background:transparent; cursor:pointer; font-size:1rem; line-height:1; color:var(--ink);
+    width:36px; height:36px; flex:none; border-radius:6px; border:1px solid var(--line);
+    background:transparent; cursor:pointer; font-size:1.2rem; line-height:1; color:var(--ink);
   }
   .board-tab-settings{
-    width:26px; border:none; background:#000; cursor:pointer;
-    font-size:0.8rem; color:#fff; border-left:1px solid rgba(255,255,255,0.3);
+    width:36px; border:none; background:#000; cursor:pointer;
+    font-size:1rem; color:#fff; border-left:1px solid rgba(255,255,255,0.3);
   }
   .board-tab-settings:hover{opacity:0.8;}
   .color-swatches{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0;}
@@ -89,12 +89,26 @@
   .note .note-text{flex:1; white-space:pre-wrap;}
   .note a.note-link{color:#8fc6ff; font-weight:600; word-break:break-all;}
   .note .note-file-link{display:inline-block; margin-top:4px; padding:4px 8px; background:#2a2a2a; border-radius:4px; font-size:0.8rem; cursor:pointer; color:#fff;}
-  .note .note-actions{position:absolute; top:6px; right:6px; display:flex; gap:4px; opacity:0.55; transition:opacity 0.15s;}
-  .note:hover .note-actions{opacity:1;}
-  .note .note-actions button{background:rgba(255,255,255,0.15); border:none; border-radius:4px; cursor:pointer; font-size:0.8rem; color:#fff; padding:3px 6px;}
+  .note .note-actions{position:absolute; top:4px; right:4px;}
+  .note .note-actions button{
+    background:rgba(255,255,255,0.15); border:none; border-radius:6px; cursor:pointer;
+    font-size:1.1rem; color:#fff; width:34px; height:34px; line-height:1;
+  }
   .note .note-actions button:hover{background:rgba(255,255,255,0.3);}
   .note.drag-placeholder{background:transparent; border:2px dashed rgba(0,0,0,0.35); box-shadow:none;}
   .drag-ghost{position:fixed; z-index:200; pointer-events:none; box-shadow:0 10px 24px rgba(0,0,0,0.45); transform:scale(1.04); opacity:0.97;}
+
+  .context-menu{
+    position:fixed; z-index:150; background:#fff; border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,0.3);
+    overflow:hidden; min-width:150px;
+  }
+  .context-menu button{
+    display:block; width:100%; text-align:left; padding:12px 16px; border:none; background:#fff;
+    cursor:pointer; font-size:0.95rem; color:#000;
+  }
+  .context-menu button:hover{background:#f0f0f0;}
+  .context-menu button.danger{color:#b23;}
+  .context-menu-backdrop{position:fixed; inset:0; z-index:140;}
 
   .note.divider-note{ background:transparent; box-shadow:none; padding:6px 2px; width:100%; max-width:100%; min-width:0; flex-basis:100%; }
   .divider-row{ display:flex; align-items:center; gap:10px; }
@@ -109,15 +123,23 @@
 
   .fab{position:fixed; bottom:24px; right:24px; width:52px; height:52px; border-radius:50%; background:var(--accent); color:#fff; font-size:1.6rem; border:none; cursor:pointer; box-shadow:0 4px 10px var(--shadow); z-index:60;}
 
-  .modal-overlay{display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); align-items:center; justify-content:center; z-index:100; padding:16px;}
-  .modal{background:#fff; border-radius:10px; padding:22px; width:100%; max-width:420px;}
+  #pull-indicator{
+    position:fixed; left:50%; top:70px; transform:translate(-50%,-40px); z-index:40;
+    background:#1a1a1a; color:#fff; padding:8px 16px; border-radius:20px; font-size:0.82rem;
+    opacity:0; transition:opacity 0.15s; pointer-events:none; display:flex; align-items:center; gap:8px;
+  }
+  #pull-indicator.visible{opacity:0.92;}
+
+  .modal-overlay{display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); align-items:flex-start; justify-content:center; z-index:100; padding:16px; overflow-y:auto;}
+  .modal{background:#fff; border-radius:10px; padding:22px; width:100%; max-width:420px; margin-top:16px; max-height:calc(100vh - 32px); overflow-y:auto; display:flex; flex-direction:column;}
   .modal h3{margin-top:0; font-size:1.1rem; font-weight:600;}
   .type-tabs{display:flex; gap:6px; margin-bottom:14px;}
-  .type-tab{flex:1; padding:10px; text-align:center; border-radius:6px; border:1px solid #ccc; cursor:pointer; font-size:1.3rem; background:#fff; line-height:1;}
+  .type-tab{flex:1; padding:12px; text-align:center; border-radius:6px; border:1px solid #ccc; cursor:pointer; font-size:1.3rem; background:#fff; line-height:1; min-height:44px;}
   .type-tab.active{background:var(--accent); color:#fff; border-color:var(--accent);}
-  .modal textarea, .modal input[type=text], .modal input[type=url]{width:100%; padding:9px; border-radius:6px; border:1px solid #ccc; font-size:0.9rem; font-family:inherit; margin-bottom:10px;}
+  .modal textarea, .modal input[type=text], .modal input[type=url]{width:100%; padding:11px; border-radius:6px; border:1px solid #ccc; font-size:0.95rem; font-family:inherit; margin-bottom:10px;}
   .modal textarea{min-height:80px; resize:vertical;}
-  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:8px;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:8px; flex-wrap:wrap;}
+  .modal-actions .btn{min-height:44px;}
   .hint{font-size:0.78rem; opacity:0.6; margin-top:-4px; margin-bottom:10px;}
   .status-bar{position:fixed; top:60px; left:50%; transform:translateX(-50%); background:#1a1a1a; color:#fff; padding:7px 14px; border-radius:16px; font-size:0.82rem; z-index:70; opacity:0; transition:opacity 0.3s; pointer-events:none;}
   .status-bar.show{opacity:0.92;}
@@ -137,6 +159,7 @@
 </header>
 
 <div id="status-bar" class="status-bar"></div>
+<div id="pull-indicator"><span class="spinner"></span><span id="pull-indicator-text">Zum Aktualisieren loslassen</span></div>
 
 <div id="login-screen">
   <h2>Bei Microsoft anmelden</h2>
@@ -252,6 +275,16 @@ let deltaLink = null;
 let currentNoteType = 'text';
 let editingNoteId = null;
 let pollTimer = null;
+function startPolling(){
+  if(pollTimer) clearInterval(pollTimer);
+  const interval = document.hidden ? 90000 : 15000;
+  pollTimer = setInterval(pollDelta, interval);
+}
+document.addEventListener('visibilitychange', ()=>{
+  if(!boardRef.folderName) return;
+  startPolling();
+  if(!document.hidden) pollDelta();
+});
 let boardModalMode = 'add';
 let boardModalColor = BOARD_COLORS[0];
 let boardModalPrivate = false;
@@ -504,14 +537,45 @@ async function deleteBoard(){
   }catch(err){ alert('Löschen fehlgeschlagen: '+err.message); }
 }
 
+let boardCache = {}; // in-memory: {folderName: {notesById, noteOrder, deltaLink}}
+function cacheStorageKey(folderName){ return 'board_cache_'+folderName; }
+function persistBoardCache(folderName){
+  try{ localSet(cacheStorageKey(folderName), JSON.stringify({ notesById, noteOrder })); }catch(e){}
+}
+function loadPersistedBoardCache(folderName){
+  const raw = localGet(cacheStorageKey(folderName));
+  if(!raw) return null;
+  try{ return JSON.parse(raw); }catch(e){ return null; }
+}
+function showBoardLoading(){
+  document.getElementById('board-grid').innerHTML = `<div class="empty-hint"><span class="spinner"></span>Lädt…</div>`;
+}
+
 async function switchBoard(name){
   const ref = boardsList.find(b=>b.folderName===name);
   if(!ref) return;
+  if(boardRef.folderName){
+    boardCache[boardRef.folderName] = { notesById, noteOrder, deltaLink };
+    persistBoardCache(boardRef.folderName);
+  }
   boardRef = ref;
   localSet('active_board_name', name);
-  notesById = {}; deltaLink = null; noteOrder = []; imageCache = {};
+  imageCache = {};
   applyBoardColor();
   renderBoardTabs();
+
+  const mem = boardCache[name];
+  const persisted = mem ? null : loadPersistedBoardCache(name);
+  if(mem){
+    notesById = mem.notesById; noteOrder = mem.noteOrder; deltaLink = mem.deltaLink;
+    renderBoard();
+  } else if(persisted){
+    notesById = persisted.notesById; noteOrder = persisted.noteOrder; deltaLink = null;
+    renderBoard();
+  } else {
+    notesById = {}; noteOrder = []; deltaLink = null;
+    showBoardLoading();
+  }
   await ensureAttachSubfolder();
   await fullLoadNotes();
   maybeRunDailyBackup();
@@ -628,10 +692,13 @@ async function startBoard(){
   applyBoardColor();
   renderHeader();
   renderBoardTabs();
+  const persisted = loadPersistedBoardCache(boardRef.folderName);
+  if(persisted){ notesById = persisted.notesById; noteOrder = persisted.noteOrder; renderBoard(); }
+  else { showBoardLoading(); }
   await fullLoadNotes();
   maybeRunDailyBackup();
   if(pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(pollDelta, 15000);
+  startPolling();
 }
 
 function notesSignature(){
@@ -649,9 +716,11 @@ async function fullLoadNotes(){
     deltaLink = res['@odata.deltaLink'] || null;
     let next = res['@odata.nextLink'];
     while(next){ const r2 = await graphFetch(next); items = items.concat(r2.value||[]); deltaLink = r2['@odata.deltaLink']||deltaLink; next = r2['@odata.nextLink']; }
+    notesById = {}; // frischer, vollständiger Stand ersetzt evtl. veralteten Zwischenspeicher
     await processDeltaItems(items);
     await loadOrder();
     renderBoard();
+    persistBoardCache(boardRef.folderName);
   }catch(err){
     document.getElementById('board-grid').innerHTML = `<div class="error-box">Notizen konnten nicht geladen werden: ${escapeHtml(err.message)}</div>`;
   }
@@ -669,14 +738,18 @@ async function pollDelta(){
     deltaLink = link;
     if(items.length){
       await processDeltaItems(items);
-      if(notesSignature() !== sigBefore) renderBoard();
+      if(notesSignature() !== sigBefore){ renderBoard(); persistBoardCache(boardRef.folderName); }
     }
   }catch(err){ console.warn('delta poll failed', err); fullLoadNotes(); }
 }
 async function processDeltaItems(items){
-  for(const item of items){
-    if(item.folder) continue;
-    if(item.parentReference && item.parentReference.path && item.parentReference.path.includes('/'+BACKUP_FOLDER)) continue;
+  const relevant = items.filter(item=>{
+    if(item.folder) return false;
+    if(item.parentReference && item.parentReference.path && item.parentReference.path.includes('/'+BACKUP_FOLDER)) return false;
+    return true;
+  });
+  // Alle betroffenen Dateien gleichzeitig statt nacheinander abrufen (deutlich schneller)
+  await Promise.all(relevant.map(async item=>{
     if(item.name === ORDER_FILE){
       if(!item.deleted){
         try{
@@ -685,16 +758,16 @@ async function processDeltaItems(items){
           noteOrder = data.order || [];
         }catch(e){}
       }
-      continue;
+      return;
     }
-    if(item.deleted){ delete notesById[item.id]; continue; }
-    if(!item.name || !item.name.startsWith('note_') || !item.name.endsWith('.json')) continue;
+    if(item.deleted){ delete notesById[item.id]; return; }
+    if(!item.name || !item.name.startsWith('note_') || !item.name.endsWith('.json')) return;
     try{
       const contentRes = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${item.id}/content`);
       const noteData = await contentRes.json();
       notesById[item.id] = { fileId:item.id, ...noteData };
     }catch(e){ console.warn('could not read note', item.name, e); }
-  }
+  }));
 }
 async function loadOrder(){
   try{
@@ -764,11 +837,37 @@ function renderNote(n){
   }
   return `<div class="note" data-id="${n.fileId}">
     ${canEdit?`<div class="note-actions">
-      <button onclick="openEditNoteModal('${n.fileId}')" title="Bearbeiten">✎</button>
-      <button onclick="deleteNote('${n.fileId}')" title="Löschen">🗑</button>
+      <button onclick="openNoteContextMenu(event,'${n.fileId}')" title="Menü">⋮</button>
     </div>`:''}
     ${body}
   </div>`;
+}
+
+function closeContextMenu(){
+  document.querySelectorAll('.context-menu, .context-menu-backdrop').forEach(el=>el.remove());
+}
+function openNoteContextMenu(e, fileId){
+  e.stopPropagation();
+  closeContextMenu();
+  const rect = e.currentTarget.getBoundingClientRect();
+  const backdrop = document.createElement('div');
+  backdrop.className = 'context-menu-backdrop';
+  backdrop.onclick = closeContextMenu;
+  document.body.appendChild(backdrop);
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.innerHTML = `
+    <button onclick="closeContextMenu(); openEditNoteModal('${fileId}')">✎ Bearbeiten</button>
+    <button class="danger" onclick="closeContextMenu(); deleteNote('${fileId}')">🗑 Löschen</button>
+  `;
+  document.body.appendChild(menu);
+  const menuRect = menu.getBoundingClientRect();
+  let left = rect.right - menuRect.width;
+  let top = rect.bottom + 4;
+  if(left < 8) left = 8;
+  if(top + menuRect.height > window.innerHeight - 8) top = rect.top - menuRect.height - 4;
+  menu.style.left = left+'px';
+  menu.style.top = top+'px';
 }
 
 const imgObserver = new IntersectionObserver(async (entries)=>{
@@ -777,17 +876,40 @@ const imgObserver = new IntersectionObserver(async (entries)=>{
       const img = entry.target; const path = img.dataset.lazy;
       if(path && !img.src){
         try{
-          const res = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          imageCache[path] = url;
-          img.src = url;
-        }catch(e){ console.warn('image load failed', e); }
+          // Erst kleine Vorschau laden (viel schneller als Originalgrösse)
+          const thumbRes = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/thumbnails/0/medium/content`);
+          const thumbBlob = await thumbRes.blob();
+          const thumbUrl = URL.createObjectURL(thumbBlob);
+          imageCache[path] = thumbUrl;
+          img.src = thumbUrl;
+          img.dataset.thumb = 'true';
+          img.style.cursor = 'zoom-in';
+          img.onclick = ()=>loadFullImage(img, path);
+        }catch(e){
+          // Falls Vorschau nicht verfügbar: direkt Originalbild laden
+          try{
+            const res = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            imageCache[path] = url;
+            img.src = url;
+          }catch(e2){ console.warn('image load failed', e2); }
+        }
       }
       imgObserver.unobserve(img);
     }
   }
 });
+async function loadFullImage(img, path){
+  img.style.cursor = 'wait';
+  try{
+    const res = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  }catch(e){ showStatus('Bild konnte nicht geladen werden'); }
+  img.style.cursor = 'zoom-in';
+}
 function observeImages(){ document.querySelectorAll('.note img[data-lazy]').forEach(img=>imgObserver.observe(img)); }
 
 async function downloadAttachment(path, filename){
@@ -808,7 +930,49 @@ async function deleteNote(fileId){
   }catch(e){ showStatus('Löschen fehlgeschlagen'); }
 }
 
-// ---------- Drag & Drop Reorder (Maus + Touch via Pointer Events) ----------
+// ---------- Pull-to-Refresh (Handy: nach unten ziehen zum Aktualisieren) ----------
+(function initPullToRefresh(){
+  let startY = null, pulling = false, triggered = false;
+  const indicator = document.getElementById('pull-indicator');
+  const textEl = document.getElementById('pull-indicator-text');
+  const THRESHOLD = 70;
+  document.addEventListener('touchstart', e=>{
+    if(window.scrollY <= 0 && document.getElementById('board').style.display === 'block'){
+      startY = e.touches[0].clientY; pulling = true; triggered = false;
+    }
+  }, {passive:true});
+  document.addEventListener('touchmove', e=>{
+    if(!pulling) return;
+    const dy = e.touches[0].clientY - startY;
+    if(dy > 0 && window.scrollY <= 0){
+      const dist = Math.min(dy, 100);
+      indicator.style.transform = `translate(-50%, ${dist-40}px)`;
+      indicator.classList.add('visible');
+      textEl.textContent = dist >= THRESHOLD ? 'Zum Aktualisieren loslassen' : 'Herunterziehen zum Aktualisieren';
+    } else {
+      pulling = false;
+      indicator.classList.remove('visible');
+    }
+  }, {passive:true});
+  document.addEventListener('touchend', e=>{
+    if(!pulling) return;
+    pulling = false;
+    const currentTranslate = indicator.style.transform;
+    const distMatch = /translate\(-50%, ([\d.-]+)px\)/.exec(currentTranslate||'');
+    const dist = distMatch ? parseFloat(distMatch[1])+40 : 0;
+    if(dist >= THRESHOLD && !triggered){
+      triggered = true;
+      textEl.textContent = 'Aktualisiere…';
+      indicator.style.transform = 'translate(-50%, 20px)';
+      fullLoadNotes().finally(()=>{
+        indicator.classList.remove('visible');
+        showStatus('Aktualisiert');
+      });
+    } else {
+      indicator.classList.remove('visible');
+    }
+  });
+})();
 let drag = null;
 function attachDragHandlers(){
   document.querySelectorAll('.note[data-id]').forEach(el=>{
