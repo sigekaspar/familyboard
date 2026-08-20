@@ -97,6 +97,7 @@
   .note .note-actions button:hover{background:rgba(255,255,255,0.3);}
   .note.drag-placeholder{background:transparent; border:2px dashed rgba(0,0,0,0.35); box-shadow:none;}
   .drag-ghost{position:fixed; z-index:200; pointer-events:none; box-shadow:0 10px 24px rgba(0,0,0,0.45); transform:scale(1.04); opacity:0.97;}
+  .important-badge{position:absolute; top:4px; left:4px; font-size:0.95rem;}
 
   .context-menu{
     position:fixed; z-index:150; background:#fff; border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,0.3);
@@ -160,9 +161,29 @@
   .manage-boards-list{ display:flex; flex-direction:column; gap:8px; margin:14px 0; max-height:50vh; overflow-y:auto; }
   .manage-board-row{ display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:6px; border:1px solid #ddd; }
   .manage-board-row .swatch{ width:18px; height:18px; border-radius:50%; flex:none; }
-  .manage-board-row .name{ flex:1; font-size:0.9rem; }
+  .manage-board-row .name{ flex:1; font-size:0.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .manage-board-row button{ background:#eee; border:none; border-radius:6px; width:36px; height:36px; cursor:pointer; font-size:1rem; flex:none; }
   .manage-board-row button:disabled{ opacity:0.3; cursor:default; }
+
+  .component-toggles{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+  .comp-toggle{
+    padding:8px 12px; border-radius:6px; border:1px solid #ccc; cursor:pointer; font-size:0.85rem;
+    background:#fff; color:#000; min-height:40px;
+  }
+  .comp-toggle.active{ background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  .undo-toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:180;
+    background:#1a1a1a; color:#fff; padding:12px 16px; border-radius:10px; font-size:0.9rem;
+    display:flex; align-items:center; gap:14px; box-shadow:0 6px 20px rgba(0,0,0,0.35);
+  }
+  .undo-toast button{ background:#fff; color:#000; border:none; border-radius:6px; padding:8px 14px; font-weight:600; cursor:pointer; }
+
+  .update-banner{
+    position:fixed; top:0; left:0; right:0; z-index:190; background:#1a1a1a; color:#fff;
+    padding:10px 16px; font-size:0.85rem; display:flex; align-items:center; justify-content:center; gap:14px;
+  }
+  .update-banner button{ background:#fff; color:#000; border:none; border-radius:6px; padding:6px 12px; font-weight:600; cursor:pointer; }
 
   @media (max-width:600px){
     #board{ padding:8px 6px; }
@@ -210,36 +231,37 @@
 <div class="modal-overlay" id="add-modal">
   <div class="modal">
     <h3 id="note-modal-title">Neue Notiz</h3>
-    <div class="type-tabs">
-      <div class="type-tab active" data-type="text" onclick="setNoteType('text')" title="Text">📝</div>
-      <div class="type-tab" data-type="link" onclick="setNoteType('link')" title="Link">🔗</div>
-      <div class="type-tab" data-type="image" onclick="setNoteType('image')" title="Bild">🖼️</div>
-      <div class="type-tab" data-type="file" onclick="setNoteType('file')" title="Datei">📎</div>
-      <div class="type-tab" data-type="divider" onclick="setNoteType('divider')" title="Trennlinie">➖</div>
-      <div class="type-tab" data-type="checklist" onclick="setNoteType('checklist')" title="Checkliste">☑️</div>
+    <div class="type-tabs" id="mode-tabs">
+      <div class="type-tab active" data-mode="note" onclick="setNoteMode('note')" title="Notiz">🗒️</div>
+      <div class="type-tab" data-mode="divider" onclick="setNoteMode('divider')" title="Trennlinie">➖</div>
+    </div>
+    <div class="component-toggles" id="component-toggles">
+      <button type="button" class="comp-toggle active" data-comp="text" onclick="toggleComponent('text')">📝 Text</button>
+      <button type="button" class="comp-toggle" data-comp="link" onclick="toggleComponent('link')">🔗 Link</button>
+      <button type="button" class="comp-toggle" data-comp="image" onclick="toggleComponent('image')">🖼️ Foto</button>
+      <button type="button" class="comp-toggle" data-comp="file" onclick="toggleComponent('file')">📎 Datei</button>
+      <button type="button" class="comp-toggle" data-comp="checklist" onclick="toggleComponent('checklist')">☑️ Checkliste</button>
     </div>
     <div id="field-text"><textarea id="input-text" placeholder="Was möchtest du teilen?"></textarea></div>
     <div id="field-link" style="display:none;">
       <input type="url" id="input-link" placeholder="https://...">
-      <textarea id="input-link-note" placeholder="Kurze Notiz dazu (optional)"></textarea>
     </div>
     <div id="field-image" style="display:none;">
       <input type="file" id="input-image" accept="image/*">
       <div class="hint">Wird in den Unterordner /anhaenge hochgeladen.</div>
-      <textarea id="input-image-note" placeholder="Beschreibung (optional)"></textarea>
     </div>
     <div id="field-file" style="display:none;">
       <input type="file" id="input-file">
       <div class="hint">Wird in den Unterordner /anhaenge hochgeladen.</div>
-      <textarea id="input-file-note" placeholder="Beschreibung (optional)"></textarea>
-    </div>
-    <div id="field-divider" style="display:none;">
-      <input type="text" id="input-divider-text" placeholder="Beschriftung (optional)">
     </div>
     <div id="field-checklist" style="display:none;">
       <div id="checklist-items-container"></div>
       <button type="button" class="add-checklist-item-btn" onclick="addChecklistItemRow()">+ Punkt hinzufügen</button>
     </div>
+    <div id="field-divider" style="display:none;">
+      <input type="text" id="input-divider-text" placeholder="Beschriftung (optional)">
+    </div>
+    <label class="checkbox-row" id="important-row"><input type="checkbox" id="input-important"> ⭐ Auch im Board "Wichtig" anzeigen</label>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeAddModal()">Abbrechen</button>
       <button class="btn btn-primary" id="save-note-btn" onclick="saveNote()">Anheften</button>
@@ -255,6 +277,7 @@
     <div class="color-swatches" id="board-color-swatches"></div>
     <label class="checkbox-row"><input type="checkbox" id="board-private-checkbox"> Nur für mich sichtbar (rein optisch, keine echte Zugriffssperre)</label>
     <div class="modal-actions">
+      <button class="btn btn-secondary" id="board-archive-btn" style="display:none; color:#000;" onclick="openArchiveModal()">Archiv</button>
       <button class="btn btn-secondary" id="board-history-btn" style="display:none; color:#000;" onclick="openBackupHistory()">Verlauf</button>
       <button class="btn btn-secondary" id="board-delete-btn" style="display:none; margin-right:auto; color:#b23;" onclick="deleteBoard()">Board löschen</button>
       <button class="btn btn-secondary" onclick="closeBoardModal()">Abbrechen</button>
@@ -274,8 +297,20 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="archive-modal">
+  <div class="modal">
+    <h3>Archiv</h3>
+    <p class="hint">Archivierte Notizen dieses Boards. "Zurückholen" macht sie wieder sichtbar.</p>
+    <div class="manage-boards-list" id="archive-list"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeArchiveModal()">Fertig</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ============ KONFIGURATION ============
+const APP_VERSION = '2026-08-20-01';
 const CLIENT_ID = '482edec5-c2bf-49db-85bf-cbd5ebfa1989';
 const REDIRECT_URI = 'https://sigekaspar.github.io/familyboard/';
 const SCOPES = ['Files.ReadWrite', 'offline_access', 'User.Read'];
@@ -284,6 +319,9 @@ const CONTAINER_NAME = 'Boards';
 const ATTACH_SUBFOLDER = 'anhaenge';
 const ORDER_FILE = '_order.json';
 const BACKUP_FOLDER = '_backups';
+const ARCHIVE_FOLDER = '_archive';
+const IMPORTANT_INDEX_FILE = '_important.json';
+const IMPORTANT_BOARD_NAME = 'Wichtig';
 const BOARD_COLORS = [
   '#d9a827','#4a90d9','#5cb85c','#c1443a','#7a5c8e','#e07b39','#2c2c2c',
   '#2f9e8f','#d94f92','#8bc34a','#5c6bc0','#c9c9c9'
@@ -310,7 +348,6 @@ let notesById = {};
 let noteOrder = [];
 let imageCache = {}; // attachmentPath -> objectURL
 let deltaLink = null;
-let currentNoteType = 'text';
 let editingNoteId = null;
 let pollTimer = null;
 function startPolling(){
@@ -321,7 +358,7 @@ function startPolling(){
 document.addEventListener('visibilitychange', ()=>{
   if(!boardRef.folderName) return;
   startPolling();
-  if(!document.hidden) pollDelta();
+  if(!document.hidden){ pollDelta(); checkForUpdate(); }
 });
 let boardModalMode = 'add';
 let boardModalColor = BOARD_COLORS[0];
@@ -335,6 +372,26 @@ function showStatus(msg, ms=2500){
 }
 function localGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
 function localSet(key,val){ try{ localStorage.setItem(key,val); }catch(e){} }
+
+// ---------- Update-Erkennung ----------
+async function checkForUpdate(){
+  try{
+    const res = await fetch(location.pathname + '?t=' + Date.now(), { cache:'no-store' });
+    const text = await res.text();
+    const match = /APP_VERSION\s*=\s*'([^']+)'/.exec(text);
+    if(match && match[1] !== APP_VERSION) showUpdateBanner();
+  }catch(e){}
+}
+function showUpdateBanner(){
+  if(document.getElementById('update-banner')) return;
+  const el = document.createElement('div');
+  el.id = 'update-banner';
+  el.className = 'update-banner';
+  el.innerHTML = `<span>Es gibt eine neuere Version der App.</span><button onclick="location.reload()">Neu laden</button>`;
+  document.body.appendChild(el);
+}
+setInterval(checkForUpdate, 10*60*1000);
+setTimeout(checkForUpdate, 8000);
 
 // ---------- Auth ----------
 async function login(){
@@ -410,7 +467,7 @@ async function connectContainer(){
   }
 }
 
-let boardsMeta = {}; // {folderName: {color}} - zentral im "Boards"-Ordner gespeichert, gilt für alle Geräte/Personen
+let boardsMeta = {}; // {folderName: {color,...}, _order:[...]} - zentral im "Boards"-Ordner gespeichert
 
 async function loadBoardsMeta(){
   try{
@@ -456,6 +513,7 @@ function nextUnusedColor(){
   return BOARD_COLORS.find(c=>!used.includes(c)) || BOARD_COLORS[0];
 }
 function applyBoardColor(){ document.documentElement.style.setProperty('--bg', boardRef.color || BOARD_COLORS[0]); }
+function isImportantBoard(){ return boardRef.folderName === IMPORTANT_BOARD_NAME; }
 
 async function ensureAttachSubfolder(){
   try{ await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}`); }
@@ -488,6 +546,7 @@ function openAddBoardModal(){
   document.getElementById('board-save-btn').textContent = 'Erstellen';
   document.getElementById('board-delete-btn').style.display = 'none';
   document.getElementById('board-history-btn').style.display = 'none';
+  document.getElementById('board-archive-btn').style.display = 'none';
   renderColorSwatches();
   document.getElementById('board-modal').style.display = 'flex';
   setTimeout(()=>document.getElementById('board-name-input').focus(), 50);
@@ -499,14 +558,18 @@ function openEditBoardModal(folderName){
   boardModalColor = b.color || BOARD_COLORS[0];
   boardModalPrivate = b.visibility === 'private';
   boardModalOriginalName = b.folderName;
+  const isSpecial = folderName === IMPORTANT_BOARD_NAME;
   document.getElementById('board-modal-title').textContent = 'Board bearbeiten';
-  document.getElementById('board-modal-hint').textContent = 'Name kann geändert werden – wird für alle sichtbar umbenannt (der OneDrive-Ordner selbst wird mit umbenannt).';
+  document.getElementById('board-modal-hint').textContent = isSpecial
+    ? 'Dieses Board wird automatisch von der App verwaltet (Sammlung markierter Karten) und kann nicht umbenannt werden.'
+    : 'Name kann geändert werden – wird für alle sichtbar umbenannt (der OneDrive-Ordner selbst wird mit umbenannt).';
   document.getElementById('board-name-input').value = b.folderName;
-  document.getElementById('board-name-input').disabled = false;
+  document.getElementById('board-name-input').disabled = isSpecial;
   document.getElementById('board-private-checkbox').checked = boardModalPrivate;
   document.getElementById('board-save-btn').textContent = 'Speichern';
-  document.getElementById('board-delete-btn').style.display = 'inline-block';
-  document.getElementById('board-history-btn').style.display = 'inline-block';
+  document.getElementById('board-delete-btn').style.display = isSpecial ? 'none' : 'inline-block';
+  document.getElementById('board-history-btn').style.display = isSpecial ? 'none' : 'inline-block';
+  document.getElementById('board-archive-btn').style.display = isSpecial ? 'none' : 'inline-block';
   renderColorSwatches();
   document.getElementById('board-modal').style.display = 'flex';
 }
@@ -530,14 +593,14 @@ async function saveBoardModal(){
       document.getElementById('setup-screen').style.display = 'none';
       await switchBoard(name);
       document.getElementById('board').style.display = 'block';
-      document.getElementById('fab-add').style.display = 'block';
+      updateFabVisibility();
     }catch(err){
       alert(`Board "${name}" konnte nicht erstellt werden (existiert es evtl. schon?): ${err.message}`);
     }
   } else {
     const oldName = boardModalOriginalName;
     try{
-      if(name !== oldName){
+      if(name !== oldName && oldName !== IMPORTANT_BOARD_NAME){
         if(boardsList.some(b=>b.folderName===name)){ alert('Ein Board mit diesem Namen existiert bereits.'); return; }
         const b = boardsList.find(x=>x.folderName===oldName);
         await graphFetch(`/drives/${b.driveId}/items/${b.itemId}`, {
@@ -546,11 +609,12 @@ async function saveBoardModal(){
         boardsMeta[name] = boardsMeta[oldName] || {};
         delete boardsMeta[oldName];
       }
-      await setBoardMeta(name, { color: boardModalColor, visibility: isPrivate?'private':'shared', owner: isPrivate?(boardsMeta[name].owner||me.email):null });
+      const finalName = oldName === IMPORTANT_BOARD_NAME ? oldName : name;
+      await setBoardMeta(finalName, { color: boardModalColor, visibility: isPrivate?'private':'shared', owner: isPrivate?(boardsMeta[finalName].owner||me.email):null });
       await refreshBoardsList();
       if(boardRef.folderName === oldName){
-        boardRef = boardsList.find(x=>x.folderName===name) || boardRef;
-        localSet('active_board_name', name);
+        boardRef = boardsList.find(x=>x.folderName===finalName) || boardRef;
+        localSet('active_board_name', finalName);
         applyBoardColor();
       }
       renderBoardTabs();
@@ -562,6 +626,7 @@ async function saveBoardModal(){
 }
 async function deleteBoard(){
   const name = boardModalOriginalName;
+  if(name === IMPORTANT_BOARD_NAME) return;
   const b = boardsList.find(x=>x.folderName===name);
   if(!b) return;
   if(!confirm(`Board "${name}" WIRKLICH löschen? Der Ordner samt Inhalt wird in OneDrive gelöscht (landet im Papierkorb, ca. 30 Tage wiederherstellbar).`)) return;
@@ -595,6 +660,9 @@ function loadPersistedBoardCache(folderName){
 function showBoardLoading(){
   document.getElementById('board-grid').innerHTML = `<div class="empty-hint"><span class="spinner"></span>Lädt…</div>`;
 }
+function updateFabVisibility(){
+  document.getElementById('fab-add').style.display = isImportantBoard() ? 'none' : 'block';
+}
 
 async function switchBoard(name){
   const ref = boardsList.find(b=>b.folderName===name);
@@ -608,6 +676,7 @@ async function switchBoard(name){
   imageCache = {};
   applyBoardColor();
   renderBoardTabs();
+  updateFabVisibility();
 
   const mem = boardCache[name];
   const persisted = mem ? null : loadPersistedBoardCache(name);
@@ -621,26 +690,31 @@ async function switchBoard(name){
     notesById = {}; noteOrder = []; deltaLink = null;
     showBoardLoading();
   }
-  await ensureAttachSubfolder();
-  await fullLoadNotes();
-  maybeRunDailyBackup();
+  if(isImportantBoard()){
+    await loadImportantBoard();
+  } else {
+    await ensureAttachSubfolder();
+    await fullLoadNotes();
+    maybeRunDailyBackup();
+  }
 }
 
 // ---------- Tägliches Backup (30 Tage Verlauf, ohne Anhänge) ----------
 function todayStr(){ return new Date().toISOString().slice(0,10); }
-async function ensureBackupSubfolder(driveId, itemId){
-  try{ return await graphFetch(`/drives/${driveId}/items/${itemId}:/${BACKUP_FOLDER}`); }
+async function ensureSpecialSubfolder(driveId, itemId, folderName){
+  try{ return await graphFetch(`/drives/${driveId}/items/${itemId}:/${folderName}`); }
   catch(e){
     return await graphFetch(`/drives/${driveId}/items/${itemId}/children`, {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ name:BACKUP_FOLDER, folder:{}, '@microsoft.graph.conflictBehavior':'rename' })
+      body: JSON.stringify({ name:folderName, folder:{}, '@microsoft.graph.conflictBehavior':'rename' })
     }).catch(()=>null);
   }
 }
 async function maybeRunDailyBackup(){
+  if(isImportantBoard()) return;
   const targetBoard = boardRef;
   try{
-    const backupFolder = await ensureBackupSubfolder(targetBoard.driveId, targetBoard.itemId);
+    const backupFolder = await ensureSpecialSubfolder(targetBoard.driveId, targetBoard.itemId, BACKUP_FOLDER);
     if(!backupFolder) return;
     const today = todayStr();
     let exists = true;
@@ -713,14 +787,143 @@ async function restoreFromBackup(b, dayFolderId){
     }
   }
 }
+
+// ---------- Archiv ----------
+async function archiveNote(fileId){
+  const n = notesById[fileId];
+  const originItemId = (n && n.originItemId) || boardRef.itemId;
+  try{
+    const folder = await ensureSpecialSubfolder(containerRef.driveId, originItemId, ARCHIVE_FOLDER);
+    await graphFetch(`/drives/${containerRef.driveId}/items/${fileId}`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ parentReference: { id: folder.id } })
+    });
+    delete notesById[fileId];
+    noteOrder = noteOrder.filter(id=>id!==fileId);
+    saveOrder();
+    await removeFromImportantIndex(fileId);
+    renderBoard();
+    showStatus('Notiz archiviert');
+  }catch(e){ showStatus('Archivieren fehlgeschlagen'); }
+}
+function archivePreviewText(n){
+  if(n.type==='divider') return '➖ '+(n.text||'Trennlinie');
+  if(n.text) return n.text.slice(0,40);
+  if(n.url) return n.url;
+  if(n.items && n.items.length) return '☑️ '+n.items.length+' Punkte';
+  if(n.imageAttachmentName) return '🖼️ '+n.imageAttachmentName;
+  if(n.fileAttachmentName) return '📎 '+n.fileAttachmentName;
+  return '(leer)';
+}
+async function openArchiveModal(){
+  const el = document.getElementById('archive-list');
+  el.innerHTML = '<div class="empty-hint"><span class="spinner"></span>Lädt…</div>';
+  document.getElementById('archive-modal').style.display = 'flex';
+  const b = boardsList.find(x=>x.folderName===boardModalOriginalName);
+  if(!b) return;
+  try{
+    const folder = await graphFetch(`/drives/${b.driveId}/items/${b.itemId}:/${ARCHIVE_FOLDER}`);
+    const children = await graphFetch(`/drives/${b.driveId}/items/${folder.id}/children?$select=id,name,file`);
+    const noteFiles = (children.value||[]).filter(it=>it.file && it.name.startsWith('note_'));
+    if(!noteFiles.length){ el.innerHTML = '<div class="empty-hint">Archiv ist leer.</div>'; return; }
+    const items = await Promise.all(noteFiles.map(async f=>{
+      try{ const r = await graphFetchRaw(`/drives/${b.driveId}/items/${f.id}/content`); const data = await r.json(); return normalizeNote({fileId:f.id, ...data}); }
+      catch(e){ return null; }
+    }));
+    el.innerHTML = items.filter(Boolean).map(n=>`
+      <div class="manage-board-row">
+        <span class="name">${escapeHtml(archivePreviewText(n))}</span>
+        <button onclick="unarchiveNote('${n.fileId}','${b.itemId}')" title="Zurückholen">↩</button>
+        <button onclick="deleteArchivedNote('${n.fileId}')" title="Endgültig löschen">🗑</button>
+      </div>
+    `).join('');
+  }catch(e){
+    el.innerHTML = '<div class="empty-hint">Archiv ist leer oder existiert noch nicht.</div>';
+  }
+}
+async function unarchiveNote(fileId, originItemId){
+  try{
+    await graphFetch(`/drives/${containerRef.driveId}/items/${fileId}`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ parentReference:{ id: originItemId } })
+    });
+    showStatus('Notiz wiederhergestellt');
+    openArchiveModal();
+    if(boardRef.folderName === boardModalOriginalName){ notesById={}; await fullLoadNotes(); }
+  }catch(e){ showStatus('Zurückholen fehlgeschlagen'); }
+}
+async function deleteArchivedNote(fileId){
+  if(!confirm('Diese archivierte Notiz endgültig löschen?')) return;
+  try{
+    await graphFetchRaw(`/drives/${containerRef.driveId}/items/${fileId}`, { method:'DELETE' });
+    showStatus('Endgültig gelöscht');
+    openArchiveModal();
+  }catch(e){ showStatus('Löschen fehlgeschlagen'); }
+}
+function closeArchiveModal(){ document.getElementById('archive-modal').style.display='none'; }
+
+// ---------- Board "Wichtig" (Sammel-Ansicht markierter Karten) ----------
+async function loadImportantIndex(){
+  try{
+    const res = await graphFetchRaw(`/drives/${containerRef.driveId}/items/${containerRef.itemId}:/${IMPORTANT_INDEX_FILE}:/content`);
+    return await res.json();
+  }catch(e){ return []; }
+}
+async function saveImportantIndex(list){
+  try{
+    await graphFetchRaw(`/drives/${containerRef.driveId}/items/${containerRef.itemId}:/${IMPORTANT_INDEX_FILE}:/content`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(list)
+    });
+  }catch(e){ console.warn('important index save failed', e); }
+}
+async function ensureImportantBoardExists(){
+  if(boardsList.some(b=>b.folderName===IMPORTANT_BOARD_NAME)) return;
+  try{
+    await graphFetch(`/drives/${containerRef.driveId}/items/${containerRef.itemId}/children`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ name: IMPORTANT_BOARD_NAME, folder:{}, '@microsoft.graph.conflictBehavior':'fail' })
+    }).catch(()=>{});
+    await refreshBoardsList();
+    renderBoardTabs();
+  }catch(e){}
+}
+async function syncImportantIndex(noteId, isImportant){
+  let list = await loadImportantIndex();
+  list = list.filter(x=>x!==noteId);
+  if(isImportant){
+    list.push(noteId);
+    await ensureImportantBoardExists();
+  }
+  await saveImportantIndex(list);
+}
+async function removeFromImportantIndex(noteId){
+  let list = await loadImportantIndex();
+  if(!list.includes(noteId)) return;
+  await saveImportantIndex(list.filter(x=>x!==noteId));
+}
+async function loadImportantBoard(){
+  const ids = await loadImportantIndex();
+  notesById = {}; noteOrder = [];
+  await Promise.all(ids.map(async id=>{
+    try{
+      const res = await graphFetchRaw(`/drives/${containerRef.driveId}/items/${id}/content`);
+      const raw = await res.json();
+      notesById[id] = normalizeNote({ fileId:id, ...raw });
+    }catch(e){ /* Notiz existiert nicht mehr - Index bereinigt sich beim nächsten Speichern eines Eintrags */ }
+  }));
+  await loadOrder();
+  renderBoard();
+  persistBoardCache(boardRef.folderName);
+}
+
 function renderBoardTabs(){
   const el = document.getElementById('board-tabs');
   if(!boardsList.length){ el.style.display='none'; return; }
   el.style.display = 'flex';
   el.innerHTML = boardsList.map(b=>{
     const isActive = b.folderName===boardRef.folderName;
+    const isSpecial = b.folderName === IMPORTANT_BOARD_NAME;
     return `<div class="board-tab-wrap ${isActive?'has-settings':''}">
-      <button class="board-tab ${isActive?'active':''}" style="${isActive?'':`background:${b.color};`}" onclick="switchBoard('${escapeAttr(b.folderName)}')">${escapeHtml(b.folderName)}</button>
+      <button class="board-tab ${isActive?'active':''}" style="${isActive?'':`background:${b.color};`}" onclick="switchBoard('${escapeAttr(b.folderName)}')">${isSpecial?'⭐ ':''}${escapeHtml(b.folderName)}</button>
       ${isActive?`<button class="board-tab-settings" onclick="openEditBoardModal('${escapeAttr(b.folderName)}')" title="Board bearbeiten">⚙</button>`:''}
     </div>`;
   }).join('')
@@ -738,7 +941,7 @@ function renderManageBoardsList(){
   el.innerHTML = boardsList.map((b,i)=>`
     <div class="manage-board-row">
       <span class="swatch" style="background:${b.color};"></span>
-      <span class="name">${escapeHtml(b.folderName)}</span>
+      <span class="name">${b.folderName===IMPORTANT_BOARD_NAME?'⭐ ':''}${escapeHtml(b.folderName)}</span>
       <button onclick="moveBoardOrder('${escapeAttr(b.folderName)}',-1)" ${i===0?'disabled':''} title="Nach oben">↑</button>
       <button onclick="moveBoardOrder('${escapeAttr(b.folderName)}',1)" ${i===boardsList.length-1?'disabled':''} title="Nach unten">↓</button>
     </div>
@@ -764,15 +967,19 @@ function renderHeader(){
 async function startBoard(){
   document.getElementById('setup-screen').style.display = 'none';
   document.getElementById('board').style.display = 'block';
-  document.getElementById('fab-add').style.display = 'block';
   applyBoardColor();
   renderHeader();
   renderBoardTabs();
+  updateFabVisibility();
   const persisted = loadPersistedBoardCache(boardRef.folderName);
   if(persisted){ notesById = persisted.notesById; noteOrder = persisted.noteOrder; renderBoard(); }
   else { showBoardLoading(); }
-  await fullLoadNotes();
-  maybeRunDailyBackup();
+  if(isImportantBoard()){
+    await loadImportantBoard();
+  } else {
+    await fullLoadNotes();
+    maybeRunDailyBackup();
+  }
   if(pollTimer) clearInterval(pollTimer);
   startPolling();
 }
@@ -780,9 +987,19 @@ async function startBoard(){
 function notesSignature(){
   const parts = Object.keys(notesById).sort().map(k=>{
     const n = notesById[k];
-    return [k, n.type, n.text, n.url, n.attachmentPath].join('~');
+    return [k, n.type, n.text, n.url, n.imageAttachmentPath, n.fileAttachmentPath, n.important, JSON.stringify(n.items||[])].join('~');
   });
   return parts.join('|') + '##' + noteOrder.join(',');
+}
+
+// Wandelt alte Einzel-Typ-Notizen (Text ODER Link ODER Bild ODER Datei ODER Checkliste) in das
+// neue kombinierbare Format um, ohne bestehende Dateien zu verändern (nur beim Anzeigen/Bearbeiten).
+function normalizeNote(n){
+  if(n.type === 'divider' || n.type === 'note') return n;
+  const norm = { ...n, type:'note' };
+  if(n.type === 'image'){ norm.imageAttachmentName = n.attachmentName; norm.imageAttachmentPath = n.attachmentPath; }
+  if(n.type === 'file'){ norm.fileAttachmentName = n.attachmentName; norm.fileAttachmentPath = n.attachmentPath; }
+  return norm;
 }
 
 async function fullLoadNotes(){
@@ -792,7 +1009,7 @@ async function fullLoadNotes(){
     deltaLink = res['@odata.deltaLink'] || null;
     let next = res['@odata.nextLink'];
     while(next){ const r2 = await graphFetch(next); items = items.concat(r2.value||[]); deltaLink = r2['@odata.deltaLink']||deltaLink; next = r2['@odata.nextLink']; }
-    notesById = {}; // frischer, vollständiger Stand ersetzt evtl. veralteten Zwischenspeicher
+    notesById = {};
     await processDeltaItems(items);
     await loadOrder();
     renderBoard();
@@ -802,7 +1019,8 @@ async function fullLoadNotes(){
   }
 }
 async function pollDelta(){
-  if(drag && drag.active) return; // während einer aktiven Verschiebung nicht neu rendern
+  if(isImportantBoard()) return; // "Wichtig" wird nur beim Wechsel/Pull-to-Refresh neu geladen
+  if(drag && drag.active) return;
   if(!deltaLink) return fullLoadNotes();
   try{
     const sigBefore = notesSignature();
@@ -821,10 +1039,9 @@ async function pollDelta(){
 async function processDeltaItems(items){
   const relevant = items.filter(item=>{
     if(item.folder) return false;
-    if(item.parentReference && item.parentReference.path && item.parentReference.path.includes('/'+BACKUP_FOLDER)) return false;
+    if(item.parentReference && item.parentReference.path && (item.parentReference.path.includes('/'+BACKUP_FOLDER) || item.parentReference.path.includes('/'+ARCHIVE_FOLDER))) return false;
     return true;
   });
-  // Alle betroffenen Dateien gleichzeitig statt nacheinander abrufen (deutlich schneller)
   await Promise.all(relevant.map(async item=>{
     if(item.name === ORDER_FILE){
       if(!item.deleted){
@@ -841,7 +1058,7 @@ async function processDeltaItems(items){
     try{
       const contentRes = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${item.id}/content`);
       const noteData = await contentRes.json();
-      notesById[item.id] = { fileId:item.id, ...noteData };
+      notesById[item.id] = normalizeNote({ fileId:item.id, originItemId: boardRef.itemId, originFolderName: boardRef.folderName, ...noteData });
     }catch(e){ console.warn('could not read note', item.name, e); }
   }));
 }
@@ -873,7 +1090,10 @@ function orderedNotes(){
 function renderBoard(){
   const grid = document.getElementById('board-grid');
   const notes = orderedNotes();
-  if(!notes.length){ grid.innerHTML = `<div class="empty-hint">Noch keine Notizen. Tippe unten rechts auf "+" um die erste anzuheften.</div>`; return; }
+  if(!notes.length){
+    grid.innerHTML = `<div class="empty-hint">${isImportantBoard() ? 'Noch keine Karte als "Wichtig" markiert. Markiere Karten in ihren Boards über das ⋮-Menü.' : 'Noch keine Notizen. Tippe unten rechts auf "+" um die erste anzuheften.'}</div>`;
+    return;
+  }
   grid.innerHTML = notes.map(n => renderNote(n)).join('');
   observeImages();
   attachDragHandlers();
@@ -884,6 +1104,7 @@ function renderNote(n){
     return `<div class="note drag-placeholder" data-id="${n.fileId}" style="width:${drag.width}px;height:${drag.height}px;"></div>`;
   }
   const canEdit = true; // jede Person darf jede Notiz bearbeiten/löschen
+  const origin = n.originItemId || boardRef.itemId;
   if(n.type === 'divider'){
     return `<div class="note divider-note" data-id="${n.fileId}">
       <div class="divider-row">
@@ -891,34 +1112,35 @@ function renderNote(n){
         <span class="divider-line"></span>
         ${canEdit?`<span class="divider-actions">
           <button onclick="openEditNoteModal('${n.fileId}')" title="Bearbeiten">✎</button>
-          <button onclick="deleteNote('${n.fileId}')" title="Löschen">🗑</button>
+          <button onclick="deleteNoteWithUndo('${n.fileId}')" title="Löschen">🗑</button>
         </span>`:''}
       </div>
     </div>`;
   }
-  let body = '';
-  if(n.type === 'text'){
-    body = `<div class="note-text">${escapeHtml(n.text||'')}</div>`;
-  } else if(n.type === 'link'){
-    body = `<div class="note-text">${n.text?escapeHtml(n.text)+'<br>':''}<a class="note-link" href="${escapeAttr(n.url)}" target="_blank" rel="noopener">${escapeHtml(n.url||'')}</a></div>`;
-  } else if(n.type === 'image'){
-    const cached = imageCache[n.attachmentPath];
-    body = cached
-      ? `<img alt="${escapeAttr(n.attachmentName||'Bild')}" src="${cached}">${n.text?`<div class="note-text">${escapeHtml(n.text)}</div>`:''}`
-      : `<img loading="lazy" alt="${escapeAttr(n.attachmentName||'Bild')}" data-lazy="${n.attachmentPath}">${n.text?`<div class="note-text">${escapeHtml(n.text)}</div>`:''}`;
-  } else if(n.type === 'file'){
-    body = `<div class="note-text">📎 ${escapeHtml(n.attachmentName||'Datei')}
-      <br><span class="note-file-link" onclick="downloadAttachment('${n.attachmentPath}','${escapeAttr(n.attachmentName||'datei')}')">Herunterladen</span></div>
-      ${n.text?`<div class="note-text">${escapeHtml(n.text)}</div>`:''}`;
-  } else if(n.type === 'checklist'){
-    body = (n.items||[]).map(it=>`
+  const parts = [];
+  if(n.text) parts.push(`<div class="note-text">${escapeHtml(n.text)}</div>`);
+  if(n.url) parts.push(`<div class="note-text"><a class="note-link" href="${escapeAttr(n.url)}" target="_blank" rel="noopener">${escapeHtml(n.url)}</a></div>`);
+  if(n.imageAttachmentPath){
+    const cached = imageCache[n.imageAttachmentPath];
+    parts.push(cached
+      ? `<img alt="${escapeAttr(n.imageAttachmentName||'Bild')}" src="${cached}">`
+      : `<img loading="lazy" alt="${escapeAttr(n.imageAttachmentName||'Bild')}" data-lazy="${n.imageAttachmentPath}" data-origin="${origin}">`);
+  }
+  if(n.fileAttachmentPath){
+    parts.push(`<div class="note-text">📎 ${escapeHtml(n.fileAttachmentName||'Datei')}
+      <br><span class="note-file-link" onclick="downloadAttachment('${n.fileAttachmentPath}','${escapeAttr(n.fileAttachmentName||'datei')}','${origin}')">Herunterladen</span></div>`);
+  }
+  if(n.items && n.items.length){
+    parts.push(n.items.map(it=>`
       <div class="checklist-item ${it.done?'done':''}">
         <input type="checkbox" ${it.done?'checked':''} onclick="toggleChecklistItem(event,'${n.fileId}','${it.id}')">
         <span class="checklist-text">${escapeHtml(it.text)}</span>
       </div>
-    `).join('');
+    `).join(''));
   }
+  const body = parts.join('');
   return `<div class="note" data-id="${n.fileId}">
+    ${n.important?'<span class="important-badge" title="Auch in \'Wichtig\'">⭐</span>':''}
     ${canEdit?`<div class="note-actions">
       <button onclick="openNoteContextMenu(event,'${n.fileId}')" title="Menü">⋮</button>
     </div>`:''}
@@ -936,7 +1158,7 @@ async function toggleChecklistItem(e, fileId, itemId){
   renderBoard();
   try{
     const { fileId:_omit, ...noteBody } = n;
-    await graphFetchRaw(`/drives/${boardRef.driveId}/items/${fileId}/content`, {
+    await graphFetchRaw(`/drives/${containerRef.driveId}/items/${fileId}/content`, {
       method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(noteBody)
     });
     persistBoardCache(boardRef.folderName);
@@ -953,6 +1175,7 @@ function closeContextMenu(){
 function openNoteContextMenu(e, fileId){
   e.stopPropagation();
   closeContextMenu();
+  const n = notesById[fileId];
   const rect = e.currentTarget.getBoundingClientRect();
   const backdrop = document.createElement('div');
   backdrop.className = 'context-menu-backdrop';
@@ -960,9 +1183,11 @@ function openNoteContextMenu(e, fileId){
   document.body.appendChild(backdrop);
   const menu = document.createElement('div');
   menu.className = 'context-menu';
+  const archiveBtn = (n && n.type !== 'divider') ? `<button onclick="closeContextMenu(); archiveNote('${fileId}')">🗄 Archivieren</button>` : '';
   menu.innerHTML = `
     <button onclick="closeContextMenu(); openEditNoteModal('${fileId}')">✎ Bearbeiten</button>
-    <button class="danger" onclick="closeContextMenu(); deleteNote('${fileId}')">🗑 Löschen</button>
+    ${archiveBtn}
+    <button class="danger" onclick="closeContextMenu(); deleteNoteWithUndo('${fileId}')">🗑 Löschen</button>
   `;
   document.body.appendChild(menu);
   const menuRect = menu.getBoundingClientRect();
@@ -977,22 +1202,19 @@ function openNoteContextMenu(e, fileId){
 const imgObserver = new IntersectionObserver(async (entries)=>{
   for(const entry of entries){
     if(entry.isIntersecting){
-      const img = entry.target; const path = img.dataset.lazy;
+      const img = entry.target; const path = img.dataset.lazy; const origin = img.dataset.origin || boardRef.itemId;
       if(path && !img.src){
         try{
-          // Erst kleine Vorschau laden (viel schneller als Originalgrösse)
-          const thumbRes = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/thumbnails/0/medium/content`);
+          const thumbRes = await graphFetchRaw(`/drives/${containerRef.driveId}/items/${origin}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/thumbnails/0/medium/content`);
           const thumbBlob = await thumbRes.blob();
           const thumbUrl = URL.createObjectURL(thumbBlob);
           imageCache[path] = thumbUrl;
           img.src = thumbUrl;
-          img.dataset.thumb = 'true';
           img.style.cursor = 'zoom-in';
-          img.onclick = ()=>loadFullImage(img, path);
+          img.onclick = ()=>loadFullImage(img, path, origin);
         }catch(e){
-          // Falls Vorschau nicht verfügbar: direkt Originalbild laden
           try{
-            const res = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
+            const res = await graphFetchRaw(`/drives/${containerRef.driveId}/items/${origin}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
             imageCache[path] = url;
@@ -1004,10 +1226,10 @@ const imgObserver = new IntersectionObserver(async (entries)=>{
     }
   }
 });
-async function loadFullImage(img, path){
+async function loadFullImage(img, path, origin){
   img.style.cursor = 'wait';
   try{
-    const res = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
+    const res = await graphFetchRaw(`/drives/${containerRef.driveId}/items/${origin}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     window.open(url, '_blank');
@@ -1016,22 +1238,51 @@ async function loadFullImage(img, path){
 }
 function observeImages(){ document.querySelectorAll('.note img[data-lazy]').forEach(img=>imgObserver.observe(img)); }
 
-async function downloadAttachment(path, filename){
+async function downloadAttachment(path, filename, origin){
+  const originId = origin || boardRef.itemId;
   try{
-    const res = await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
+    const res = await graphFetchRaw(`/drives/${containerRef.driveId}/items/${originId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
     const blob = await res.blob();
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click();
   }catch(e){ showStatus('Download fehlgeschlagen'); }
 }
-async function deleteNote(fileId){
-  if(!confirm('Notiz wirklich löschen?')) return;
-  try{
-    await graphFetchRaw(`/drives/${boardRef.driveId}/items/${fileId}`, { method:'DELETE' });
-    delete notesById[fileId];
-    noteOrder = noteOrder.filter(id=>id!==fileId);
+
+// ---------- Löschen mit kurzem "Rückgängig"-Zeitfenster ----------
+let pendingDeletes = {};
+function showUndoToast(msg, onUndo){
+  const existing = document.getElementById('undo-toast'); if(existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'undo-toast';
+  el.className = 'undo-toast';
+  el.innerHTML = `<span>${escapeHtml(msg)}</span><button>Rückgängig</button>`;
+  el.querySelector('button').onclick = ()=>{ onUndo(); el.remove(); };
+  document.body.appendChild(el);
+  setTimeout(()=>{ if(el.parentNode) el.remove(); }, 6000);
+}
+function deleteNoteWithUndo(fileId){
+  const n = notesById[fileId];
+  if(!n) return;
+  delete notesById[fileId];
+  noteOrder = noteOrder.filter(id=>id!==fileId);
+  renderBoard();
+  showUndoToast('Notiz gelöscht', ()=>{
+    const pending = pendingDeletes[fileId];
+    if(pending) clearTimeout(pending.timeoutId);
+    delete pendingDeletes[fileId];
+    notesById[fileId] = n;
+    if(!noteOrder.includes(fileId)) noteOrder.push(fileId);
     saveOrder();
-    renderBoard(); showStatus('Notiz gelöscht');
-  }catch(e){ showStatus('Löschen fehlgeschlagen'); }
+    renderBoard();
+  });
+  const timeoutId = setTimeout(async ()=>{
+    delete pendingDeletes[fileId];
+    try{
+      await graphFetchRaw(`/drives/${containerRef.driveId}/items/${fileId}`, { method:'DELETE' });
+      saveOrder();
+      await removeFromImportantIndex(fileId);
+    }catch(e){ console.warn('delete failed', e); }
+  }, 6000);
+  pendingDeletes[fileId] = { timeoutId };
 }
 
 // ---------- Pull-to-Refresh (Handy: nach unten ziehen zum Aktualisieren) ----------
@@ -1068,7 +1319,8 @@ async function deleteNote(fileId){
       triggered = true;
       textEl.textContent = 'Aktualisiere…';
       indicator.style.transform = 'translate(-50%, 20px)';
-      fullLoadNotes().finally(()=>{
+      const reload = isImportantBoard() ? loadImportantBoard() : fullLoadNotes();
+      Promise.resolve(reload).finally(()=>{
         indicator.classList.remove('visible');
         showStatus('Aktualisiert');
       });
@@ -1102,7 +1354,6 @@ function activateDrag(e, el){
   drag.width = rect.width; drag.height = rect.height;
   const ghost = el.cloneNode(true);
   ghost.classList.add('drag-ghost');
-  ghost.classList.remove('note-hover');
   ghost.style.width = rect.width+'px';
   ghost.style.left = rect.left+'px';
   ghost.style.top = rect.top+'px';
@@ -1158,7 +1409,34 @@ function endDrag(persist){
 }
 
 // ---------- Add/edit note modal ----------
+let noteMode = 'note'; // 'note' | 'divider'
+let activeComponents = new Set(['text']);
 let checklistItemsDraft = [];
+
+function setNoteMode(mode){
+  noteMode = mode;
+  document.querySelectorAll('#mode-tabs .type-tab').forEach(t=>t.classList.toggle('active', t.dataset.mode===mode));
+  document.getElementById('component-toggles').style.display = mode==='note' ? 'flex' : 'none';
+  document.getElementById('important-row').style.display = mode==='note' ? 'flex' : 'none';
+  document.getElementById('field-divider').style.display = mode==='divider' ? 'block' : 'none';
+  document.querySelectorAll('.comp-toggle').forEach(btn=>{
+    const c = btn.dataset.comp;
+    const isOn = activeComponents.has(c);
+    btn.classList.toggle('active', isOn);
+    document.getElementById('field-'+c).style.display = (mode==='note' && isOn) ? 'block' : 'none';
+  });
+  if(mode==='divider') setTimeout(()=>document.getElementById('input-divider-text').focus(), 60);
+  else if(activeComponents.has('text')) setTimeout(()=>document.getElementById('input-text').focus(), 60);
+}
+function toggleComponent(comp){
+  if(activeComponents.has(comp)) activeComponents.delete(comp); else activeComponents.add(comp);
+  const isOn = activeComponents.has(comp);
+  document.querySelector(`.comp-toggle[data-comp="${comp}"]`).classList.toggle('active', isOn);
+  document.getElementById('field-'+comp).style.display = isOn ? 'block' : 'none';
+  if(comp==='checklist' && isOn && checklistItemsDraft.length===0) addChecklistItemRow();
+  if(isOn && comp==='text') setTimeout(()=>document.getElementById('input-text').focus(), 30);
+  if(isOn && comp==='link') setTimeout(()=>document.getElementById('input-link').focus(), 30);
+}
 function addChecklistItemRow(prefill=''){
   checklistItemsDraft.push({ id: uuid(), text: prefill, done:false });
   renderChecklistDraft();
@@ -1181,19 +1459,20 @@ function renderChecklistDraft(){
     </div>
   `).join('');
 }
-function focusForType(type){
-  const map = { text:'input-text', link:'input-link', image:'input-image-note', file:'input-file-note', divider:'input-divider-text' };
-  const el = document.getElementById(map[type]);
-  if(el) setTimeout(()=>el.focus(), 60);
-}
 function openAddModal(){
   editingNoteId = null;
   checklistItemsDraft = [];
+  activeComponents = new Set(['text']);
   document.getElementById('note-modal-title').textContent = 'Neue Notiz';
   document.getElementById('save-note-btn').textContent = 'Anheften';
-  setNoteType('text');
+  document.getElementById('input-text').value = '';
+  document.getElementById('input-link').value = '';
+  document.getElementById('input-image').value = '';
+  document.getElementById('input-file').value = '';
+  document.getElementById('input-divider-text').value = '';
+  document.getElementById('input-important').checked = false;
+  setNoteMode('note');
   document.getElementById('add-modal').style.display = 'flex';
-  focusForType('text');
 }
 function openEditNoteModal(fileId){
   const n = notesById[fileId];
@@ -1201,33 +1480,40 @@ function openEditNoteModal(fileId){
   editingNoteId = fileId;
   document.getElementById('note-modal-title').textContent = 'Notiz bearbeiten';
   document.getElementById('save-note-btn').textContent = 'Speichern';
-  setNoteType(n.type);
-  if(n.type === 'text'){ document.getElementById('input-text').value = n.text||''; }
-  else if(n.type === 'link'){ document.getElementById('input-link').value = n.url||''; document.getElementById('input-link-note').value = n.text||''; }
-  else if(n.type === 'image'){ document.getElementById('input-image-note').value = n.text||''; }
-  else if(n.type === 'file'){ document.getElementById('input-file-note').value = n.text||''; }
-  else if(n.type === 'divider'){ document.getElementById('input-divider-text').value = n.text||''; }
-  else if(n.type === 'checklist'){ checklistItemsDraft = (n.items||[]).map(it=>({...it})); renderChecklistDraft(); }
+  document.getElementById('input-important').checked = !!n.important;
+  document.getElementById('input-image').value = '';
+  document.getElementById('input-file').value = '';
+  if(n.type === 'divider'){
+    document.getElementById('input-divider-text').value = n.text||'';
+    setNoteMode('divider');
+  } else {
+    activeComponents = new Set();
+    if(n.text) activeComponents.add('text');
+    if(n.url) activeComponents.add('link');
+    if(n.imageAttachmentPath) activeComponents.add('image');
+    if(n.fileAttachmentPath) activeComponents.add('file');
+    if(n.items && n.items.length) activeComponents.add('checklist');
+    if(!activeComponents.size) activeComponents.add('text');
+    document.getElementById('input-text').value = n.text||'';
+    document.getElementById('input-link').value = n.url||'';
+    checklistItemsDraft = (n.items||[]).map(it=>({...it}));
+    setNoteMode('note');
+    renderChecklistDraft();
+  }
   document.getElementById('add-modal').style.display = 'flex';
-  focusForType(n.type);
 }
 function closeAddModal(){
   document.getElementById('add-modal').style.display = 'none';
-  ['input-text','input-link','input-link-note','input-image-note','input-file-note','input-divider-text'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
-  document.getElementById('input-image').value = ''; document.getElementById('input-file').value = '';
+  document.getElementById('input-text').value = '';
+  document.getElementById('input-link').value = '';
+  document.getElementById('input-divider-text').value = '';
+  document.getElementById('input-image').value = '';
+  document.getElementById('input-file').value = '';
+  document.getElementById('input-important').checked = false;
   editingNoteId = null;
   checklistItemsDraft = [];
-  setNoteType('text');
-}
-function setNoteType(type){
-  currentNoteType = type;
-  document.querySelectorAll('.type-tab').forEach(t=>t.classList.toggle('active', t.dataset.type===type));
-  ['text','link','image','file','divider','checklist'].forEach(t=>{ document.getElementById('field-'+t).style.display = (t===type)?'block':'none'; });
-  if(type === 'checklist'){
-    if(!editingNoteId && checklistItemsDraft.length===0) addChecklistItemRow();
-    else renderChecklistDraft();
-  }
-  if(!editingNoteId) focusForType(type);
+  activeComponents = new Set(['text']);
+  setNoteMode('note');
 }
 async function saveNote(){
   const btn = document.getElementById('save-note-btn');
@@ -1236,55 +1522,72 @@ async function saveNote(){
   try{
     const existing = isEdit ? notesById[editingNoteId] : null;
     const id = existing ? existing.id : uuid();
+    const targetFolderId = existing ? (existing.originItemId || boardRef.itemId) : boardRef.itemId;
     const note = {
-      id, type: currentNoteType,
+      id, type: noteMode,
       author: existing ? existing.author : me.name,
       authorEmail: existing ? existing.authorEmail : me.email,
-      timestamp: existing ? existing.timestamp : new Date().toISOString()
+      timestamp: existing ? existing.timestamp : new Date().toISOString(),
+      originItemId: targetFolderId,
+      important: noteMode === 'divider' ? false : document.getElementById('input-important').checked
     };
-    if(currentNoteType === 'text'){
-      note.text = document.getElementById('input-text').value.trim();
-      if(!note.text) throw new Error('Bitte Text eingeben.');
-    } else if(currentNoteType === 'link'){
-      note.url = document.getElementById('input-link').value.trim();
-      note.text = document.getElementById('input-link-note').value.trim();
-      if(!note.url) throw new Error('Bitte Link eingeben.');
-    } else if(currentNoteType === 'image'){
-      const f = document.getElementById('input-image').files[0];
-      note.text = document.getElementById('input-image-note').value.trim();
-      if(f){ note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name); await uploadAttachment(f, note.attachmentPath); }
-      else if(existing && existing.attachmentPath){ note.attachmentName = existing.attachmentName; note.attachmentPath = existing.attachmentPath; }
-      else { throw new Error('Bitte Bild auswählen.'); }
-    } else if(currentNoteType === 'file'){
-      const f = document.getElementById('input-file').files[0];
-      note.text = document.getElementById('input-file-note').value.trim();
-      if(f){ note.attachmentName = f.name; note.attachmentPath = id + '_' + sanitizeFilename(f.name); await uploadAttachment(f, note.attachmentPath); }
-      else if(existing && existing.attachmentPath){ note.attachmentName = existing.attachmentName; note.attachmentPath = existing.attachmentPath; }
-      else { throw new Error('Bitte Datei auswählen.'); }
-    } else if(currentNoteType === 'divider'){
+    if(noteMode === 'divider'){
       note.text = document.getElementById('input-divider-text').value.trim();
-    } else if(currentNoteType === 'checklist'){
-      const items = checklistItemsDraft.map(it=>({ id:it.id, text:it.text.trim(), done:!!it.done })).filter(it=>it.text);
-      if(!items.length) throw new Error('Bitte mindestens einen Punkt hinzufügen.');
-      note.items = items;
+    } else {
+      if(activeComponents.size===0) throw new Error('Bitte mindestens einen Baustein wählen (Text, Link, Foto, Datei oder Checkliste).');
+      if(activeComponents.has('text')){
+        note.text = document.getElementById('input-text').value.trim();
+      }
+      if(activeComponents.has('link')){
+        note.url = document.getElementById('input-link').value.trim();
+        if(!note.url) throw new Error('Bitte Link eingeben oder den Link-Baustein wieder abwählen.');
+      }
+      if(activeComponents.has('image')){
+        const f = document.getElementById('input-image').files[0];
+        if(f){ note.imageAttachmentName = f.name; note.imageAttachmentPath = id+'_img_'+sanitizeFilename(f.name); await uploadAttachment(f, note.imageAttachmentPath, targetFolderId); }
+        else if(existing && existing.imageAttachmentPath){ note.imageAttachmentName = existing.imageAttachmentName; note.imageAttachmentPath = existing.imageAttachmentPath; }
+        else throw new Error('Bitte Bild auswählen oder den Foto-Baustein wieder abwählen.');
+      }
+      if(activeComponents.has('file')){
+        const f = document.getElementById('input-file').files[0];
+        if(f){ note.fileAttachmentName = f.name; note.fileAttachmentPath = id+'_file_'+sanitizeFilename(f.name); await uploadAttachment(f, note.fileAttachmentPath, targetFolderId); }
+        else if(existing && existing.fileAttachmentPath){ note.fileAttachmentName = existing.fileAttachmentName; note.fileAttachmentPath = existing.fileAttachmentPath; }
+        else throw new Error('Bitte Datei auswählen oder den Datei-Baustein wieder abwählen.');
+      }
+      if(activeComponents.has('checklist')){
+        const items = checklistItemsDraft.map(it=>({ id:it.id, text:it.text.trim(), done:!!it.done })).filter(it=>it.text);
+        if(!items.length) throw new Error('Bitte mindestens einen Checklisten-Punkt hinzufügen oder den Checklisten-Baustein wieder abwählen.');
+        note.items = items;
+      }
+      const hasAnything = note.text || note.url || note.imageAttachmentPath || note.fileAttachmentPath || (note.items && note.items.length);
+      if(!hasAnything) throw new Error('Bitte mindestens einen Inhalt hinzufügen.');
     }
-    const created = await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/note_${id}.json:/content`, {
-      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(note)
-    });
+    let created;
+    if(isEdit){
+      created = await graphFetch(`/drives/${containerRef.driveId}/items/${editingNoteId}/content`, {
+        method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(note)
+      });
+    } else {
+      created = await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/note_${id}.json:/content`, {
+        method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(note)
+      });
+    }
     if(isEdit && editingNoteId !== created.id){ delete notesById[editingNoteId]; }
     notesById[created.id] = { fileId:created.id, ...note };
-    if(!noteOrder.includes(created.id)){ noteOrder.push(created.id); saveOrder(); }
+    if(!noteOrder.includes(created.id) && !isImportantBoard()){ noteOrder.push(created.id); saveOrder(); }
+    await syncImportantIndex(created.id, note.important);
     renderBoard(); closeAddModal(); showStatus(isEdit ? 'Notiz gespeichert' : 'Notiz angeheftet');
   }catch(err){
     alert(err.message || 'Fehler beim Speichern');
   }finally{ btn.disabled = false; }
 }
-async function uploadAttachment(file, path){
+async function uploadAttachment(file, path, folderItemId){
+  const targetId = folderItemId || boardRef.itemId;
   const encodedPath = encodeURIComponent(path);
   if(file.size < 4*1024*1024){
-    await graphFetchRaw(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodedPath}:/content`, { method:'PUT', body: file });
+    await graphFetchRaw(`/drives/${containerRef.driveId}/items/${targetId}:/${ATTACH_SUBFOLDER}/${encodedPath}:/content`, { method:'PUT', body: file });
   } else {
-    const session = await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}/${encodedPath}:/createUploadSession`, {
+    const session = await graphFetch(`/drives/${containerRef.driveId}/items/${targetId}:/${ATTACH_SUBFOLDER}/${encodedPath}:/createUploadSession`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ item:{ '@microsoft.graph.conflictBehavior':'rename' } })
     });
