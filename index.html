@@ -98,6 +98,11 @@
   .note.drag-placeholder{background:transparent; border:2px dashed rgba(0,0,0,0.35); box-shadow:none;}
   .drag-ghost{position:fixed; z-index:200; pointer-events:none; box-shadow:0 10px 24px rgba(0,0,0,0.45); transform:scale(1.04); opacity:0.97;}
   .important-badge{position:absolute; top:4px; left:4px; font-size:0.95rem;}
+  .day-header{
+    flex-basis:100%; width:100%; color:#fff; font-weight:600; font-size:0.85rem;
+    padding:14px 4px 6px; border-bottom:1px solid rgba(255,255,255,0.25); margin-top:4px;
+  }
+  .day-header[data-day-header="neutral"]{ opacity:0.8; font-style:italic; }
 
   .context-menu{
     position:fixed; z-index:150; background:#fff; border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,0.3);
@@ -394,6 +399,33 @@ setInterval(checkForUpdate, 10*60*1000);
 setTimeout(checkForUpdate, 8000);
 
 // ---------- Auth ----------
+function showOfflineNotice(){
+  let el = document.getElementById('offline-badge');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'offline-badge';
+    el.className = 'user-chip';
+    el.style.background = '#7a2318';
+    el.style.color = '#fff';
+    el.textContent = '📡 Offline – letzter bekannter Stand';
+    document.getElementById('header-right').prepend(el);
+  }
+}
+function hideOfflineNotice(){
+  const el = document.getElementById('offline-badge');
+  if(el) el.remove();
+}
+window.addEventListener('offline', showOfflineNotice);
+window.addEventListener('online', ()=>{
+  hideOfflineNotice();
+  if(boardRef.folderName){ isImportantBoard() ? loadImportantBoard() : fullLoadNotes(); }
+});
+
+// ---------- Service Worker (App-Hülle offline verfügbar machen) ----------
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+}
+
 async function login(){
   if(msalInitError){
     document.getElementById('login-area').innerHTML = `<div class="error-box">${escapeHtml(msalInitError.message)}</div>
@@ -512,16 +544,17 @@ function nextUnusedColor(){
   const used = boardsList.map(b=>b.color);
   return BOARD_COLORS.find(c=>!used.includes(c)) || BOARD_COLORS[0];
 }
-function applyBoardColor(){ document.documentElement.style.setProperty('--bg', boardRef.color || BOARD_COLORS[0]); }
+function applyBoardColor(){ document.documentElement.style.setProperty('--bg', isImportantBoard() ? '#000000' : (boardRef.color || BOARD_COLORS[0])); }
 function isImportantBoard(){ return boardRef.folderName === IMPORTANT_BOARD_NAME; }
 
-async function ensureAttachSubfolder(){
-  try{ await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}:/${ATTACH_SUBFOLDER}`); }
+async function ensureAttachSubfolder(driveId, itemId){
+  const d = driveId || boardRef.driveId, i = itemId || boardRef.itemId;
+  try{ return await graphFetch(`/drives/${d}/items/${i}:/${ATTACH_SUBFOLDER}`); }
   catch(e){
-    await graphFetch(`/drives/${boardRef.driveId}/items/${boardRef.itemId}/children`, {
+    return await graphFetch(`/drives/${d}/items/${i}/children`, {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ name:ATTACH_SUBFOLDER, folder:{}, '@microsoft.graph.conflictBehavior':'rename' })
-    }).catch(()=>{});
+    }).catch(()=>null);
   }
 }
 
@@ -865,7 +898,8 @@ function closeArchiveModal(){ document.getElementById('archive-modal').style.dis
 async function loadImportantIndex(){
   try{
     const res = await graphFetchRaw(`/drives/${containerRef.driveId}/items/${containerRef.itemId}:/${IMPORTANT_INDEX_FILE}:/content`);
-    return await res.json();
+    const raw = await res.json();
+    return raw.map(x => typeof x === 'string' ? { id:x, dueDate:null } : x);
   }catch(e){ return []; }
 }
 async function saveImportantIndex(list){
@@ -888,31 +922,107 @@ async function ensureImportantBoardExists(){
 }
 async function syncImportantIndex(noteId, isImportant){
   let list = await loadImportantIndex();
-  list = list.filter(x=>x!==noteId);
+  const existing = list.find(x=>x.id===noteId);
+  list = list.filter(x=>x.id!==noteId);
   if(isImportant){
-    list.push(noteId);
+    list.push({ id:noteId, dueDate: existing ? existing.dueDate : null });
     await ensureImportantBoardExists();
   }
   await saveImportantIndex(list);
 }
 async function removeFromImportantIndex(noteId){
   let list = await loadImportantIndex();
-  if(!list.includes(noteId)) return;
-  await saveImportantIndex(list.filter(x=>x!==noteId));
+  if(!list.some(x=>x.id===noteId)) return;
+  await saveImportantIndex(list.filter(x=>x.id!==noteId));
+}
+async function updateImportantDueDate(noteId, dueDate){
+  let list = await loadImportantIndex();
+  const entry = list.find(x=>x.id===noteId);
+  if(entry) entry.dueDate = dueDate;
+  else list.push({ id:noteId, dueDate });
+  await saveImportantIndex(list);
 }
 async function loadImportantBoard(){
-  const ids = await loadImportantIndex();
-  notesById = {}; noteOrder = [];
-  await Promise.all(ids.map(async id=>{
-    try{
-      const res = await graphFetchRaw(`/drives/${containerRef.driveId}/items/${id}/content`);
-      const raw = await res.json();
-      notesById[id] = normalizeNote({ fileId:id, ...raw });
-    }catch(e){ /* Notiz existiert nicht mehr - Index bereinigt sich beim nächsten Speichern eines Eintrags */ }
-  }));
-  await loadOrder();
-  renderBoard();
-  persistBoardCache(boardRef.folderName);
+  try{
+    const res = await graphFetchRaw(`/drives/${containerRef.driveId}/items/${containerRef.itemId}:/${IMPORTANT_INDEX_FILE}:/content`);
+    const raw = await res.json();
+    const list = raw.map(x => typeof x === 'string' ? { id:x, dueDate:null } : x);
+    const freshNotesById = {};
+    await Promise.all(list.map(async entry=>{
+      try{
+        const r = await graphFetchRaw(`/drives/${containerRef.driveId}/items/${entry.id}/content`);
+        const data = await r.json();
+        const n = normalizeNote({ fileId:entry.id, ...data });
+        n.dueDate = entry.dueDate || null;
+        freshNotesById[entry.id] = n;
+      }catch(e){ /* einzelne Notiz nicht lesbar - überspringen */ }
+    }));
+    notesById = freshNotesById;
+    await loadOrder();
+    renderBoard();
+    persistBoardCache(boardRef.folderName);
+    hideOfflineNotice();
+  }catch(err){
+    console.warn('loadImportantBoard failed', err);
+    if(Object.keys(notesById).length){
+      showOfflineNotice();
+    } else {
+      document.getElementById('board-grid').innerHTML = `<div class="error-box">Keine Internetverbindung und noch kein gespeicherter Stand für "Wichtig" vorhanden.</div>`;
+    }
+  }
+}
+
+// ---------- Wichtig: 7-Tage-Ansicht ----------
+function importantDayKeys(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const keys = [];
+  for(let i=0;i<7;i++){ const d = new Date(today); d.setDate(d.getDate()+i); keys.push(isoDateLocal(d)); }
+  return keys;
+}
+function isoDateLocal(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function dayHeaderLabel(iso){
+  const [y,m,d] = iso.split('-').map(Number);
+  const date = new Date(y, m-1, d);
+  const weekday = date.toLocaleDateString('de-DE', { weekday:'long' });
+  const datePart = date.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit' });
+  return `${weekday}, ${datePart}`;
+}
+function bucketKeyFor(dueDate, days){
+  if(!dueDate) return 'neutral';
+  if(dueDate < days[0]) return 'neutral'; // vergangene Tage rutschen automatisch ins Allgemeine
+  const idx = days.indexOf(dueDate);
+  return idx===-1 ? 'neutral' : dueDate;
+}
+function renderImportantBoardGrid(){
+  const grid = document.getElementById('board-grid');
+  const all = Object.values(notesById);
+  if(!all.length){
+    grid.innerHTML = `<div class="empty-hint">Noch keine Karte als "Wichtig" markiert. Markiere Karten in ihren Boards über das ⋮-Menü.</div>`;
+    return;
+  }
+  const days = importantDayKeys();
+  const byId = {}; all.forEach(n=>byId[n.fileId]=n);
+  let orderedIds = noteOrder.length ? noteOrder.filter(id=>byId[id]) : all.map(n=>n.fileId);
+  all.forEach(n=>{ if(!orderedIds.includes(n.fileId)) orderedIds.push(n.fileId); });
+
+  const buckets = { neutral: [] };
+  days.forEach(d=>buckets[d]=[]);
+  orderedIds.forEach(id=>{
+    const n = byId[id];
+    buckets[bucketKeyFor(n.dueDate, days)].push(n);
+  });
+
+  let html = renderDayHeader('neutral', 'Allgemein') + buckets.neutral.map(n=>renderNote(n)).join('');
+  days.forEach(d=>{ html += renderDayHeader(d, dayHeaderLabel(d)) + buckets[d].map(n=>renderNote(n)).join(''); });
+  grid.innerHTML = html;
+  observeImages();
+  attachDragHandlers();
+}
+function renderDayHeader(key, label){
+  return `<div class="day-header" data-day-header="${key}">${escapeHtml(label)}</div>`;
 }
 
 function renderBoardTabs(){
@@ -929,6 +1039,8 @@ function renderBoardTabs(){
   }).join('')
     + `<button class="board-tab-add" onclick="openManageBoardsModal()" title="Boards verwalten / Reihenfolge ändern">☰</button>`
     + `<button class="board-tab-add" onclick="openAddBoardModal()" title="Neues Board hinzufügen">+</button>`;
+  const activeTab = el.querySelector('.board-tab.active');
+  if(activeTab) activeTab.scrollIntoView({inline:'center', block:'nearest'});
 }
 
 function openManageBoardsModal(){
@@ -1014,8 +1126,14 @@ async function fullLoadNotes(){
     await loadOrder();
     renderBoard();
     persistBoardCache(boardRef.folderName);
+    hideOfflineNotice();
   }catch(err){
-    document.getElementById('board-grid').innerHTML = `<div class="error-box">Notizen konnten nicht geladen werden: ${escapeHtml(err.message)}</div>`;
+    console.warn('fullLoadNotes failed', err);
+    if(Object.keys(notesById).length){
+      showOfflineNotice(); // letzten bekannten Stand stehen lassen, nur Hinweis zeigen
+    } else {
+      document.getElementById('board-grid').innerHTML = `<div class="error-box">Keine Internetverbindung und noch kein gespeicherter Stand für dieses Board vorhanden.</div>`;
+    }
   }
 }
 async function pollDelta(){
@@ -1088,10 +1206,11 @@ function orderedNotes(){
 }
 
 function renderBoard(){
+  if(isImportantBoard()){ renderImportantBoardGrid(); return; }
   const grid = document.getElementById('board-grid');
   const notes = orderedNotes();
   if(!notes.length){
-    grid.innerHTML = `<div class="empty-hint">${isImportantBoard() ? 'Noch keine Karte als "Wichtig" markiert. Markiere Karten in ihren Boards über das ⋮-Menü.' : 'Noch keine Notizen. Tippe unten rechts auf "+" um die erste anzuheften.'}</div>`;
+    grid.innerHTML = `<div class="empty-hint">Noch keine Notizen. Tippe unten rechts auf "+" um die erste anzuheften.</div>`;
     return;
   }
   grid.innerHTML = notes.map(n => renderNote(n)).join('');
@@ -1139,13 +1258,25 @@ function renderNote(n){
     `).join(''));
   }
   const body = parts.join('');
-  return `<div class="note" data-id="${n.fileId}">
+  let cardStyle = '';
+  if(isImportantBoard()){
+    const originBoard = boardsList.find(b=>b.itemId===origin);
+    const bg = originBoard ? originBoard.color : '#333333';
+    cardStyle = ` style="background:${bg}; color:${contrastColor(bg)};"`;
+  }
+  return `<div class="note" data-id="${n.fileId}"${cardStyle}>
     ${n.important?'<span class="important-badge" title="Auch in \'Wichtig\'">⭐</span>':''}
     ${canEdit?`<div class="note-actions">
       <button onclick="openNoteContextMenu(event,'${n.fileId}')" title="Menü">⋮</button>
     </div>`:''}
     ${body}
   </div>`;
+}
+function contrastColor(hex){
+  const h = (hex||'#000000').replace('#','');
+  const r = parseInt(h.substring(0,2),16), g = parseInt(h.substring(2,4),16), b = parseInt(h.substring(4,6),16);
+  const luminance = (0.299*r + 0.587*g + 0.114*b) / 255;
+  return luminance > 0.6 ? '#000' : '#f2f2f2';
 }
 
 async function toggleChecklistItem(e, fileId, itemId){
@@ -1172,11 +1303,75 @@ async function toggleChecklistItem(e, fileId, itemId){
 function closeContextMenu(){
   document.querySelectorAll('.context-menu, .context-menu-backdrop').forEach(el=>el.remove());
 }
+function openMoveNoteMenu(fileId){
+  closeContextMenu();
+  const n = notesById[fileId];
+  if(!n) return;
+  const originId = n.originItemId || boardRef.itemId;
+  const targets = boardsList.filter(b=>b.folderName!==IMPORTANT_BOARD_NAME && b.itemId!==originId);
+  if(!targets.length){ showStatus('Kein anderes Board vorhanden'); return; }
+  const rect = lastMenuAnchorRect || { right:window.innerWidth/2, bottom:100, top:80 };
+  const backdrop = document.createElement('div');
+  backdrop.className = 'context-menu-backdrop';
+  backdrop.onclick = closeContextMenu;
+  document.body.appendChild(backdrop);
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.innerHTML = targets.map(b=>`<button onclick="closeContextMenu(); moveNoteToBoard('${fileId}','${escapeAttr(b.folderName)}')">${escapeHtml(b.folderName)}</button>`).join('');
+  document.body.appendChild(menu);
+  const menuRect = menu.getBoundingClientRect();
+  let left = rect.right - menuRect.width;
+  let top = rect.bottom + 4;
+  if(left < 8) left = 8;
+  if(top + menuRect.height > window.innerHeight - 8) top = rect.top - menuRect.height - 4;
+  menu.style.left = left+'px';
+  menu.style.top = top+'px';
+}
+async function moveNoteToBoard(fileId, targetFolderName){
+  const n = notesById[fileId];
+  const target = boardsList.find(b=>b.folderName===targetFolderName);
+  if(!n || !target) return;
+  const originId = n.originItemId || boardRef.itemId;
+  showStatus('Verschiebe…');
+  try{
+    await graphFetch(`/drives/${containerRef.driveId}/items/${fileId}`, {
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ parentReference:{ id: target.itemId } })
+    });
+    const attachFolder = await ensureAttachSubfolder(target.driveId, target.itemId);
+    for(const pathField of ['imageAttachmentPath','fileAttachmentPath']){
+      const path = n[pathField];
+      if(path && attachFolder){
+        try{
+          await graphFetch(`/drives/${containerRef.driveId}/items/${originId}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}`, {
+            method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ parentReference:{ id: attachFolder.id } })
+          });
+        }catch(e){ console.warn('Anhang konnte nicht mitverschoben werden', path, e); }
+      }
+    }
+    const { fileId:_omit, ...noteBody } = n;
+    noteBody.originItemId = target.itemId;
+    await graphFetchRaw(`/drives/${containerRef.driveId}/items/${fileId}/content`, {
+      method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(noteBody)
+    });
+    if(isImportantBoard()){
+      notesById[fileId].originItemId = target.itemId;
+      renderBoard();
+    } else {
+      noteOrder = noteOrder.filter(id=>id!==fileId);
+      saveOrder();
+      delete notesById[fileId];
+      renderBoard();
+    }
+    showStatus(`In "${targetFolderName}" verschoben`);
+  }catch(err){ alert('Verschieben fehlgeschlagen: '+err.message); }
+}
+let lastMenuAnchorRect = null;
 function openNoteContextMenu(e, fileId){
   e.stopPropagation();
   closeContextMenu();
   const n = notesById[fileId];
   const rect = e.currentTarget.getBoundingClientRect();
+  lastMenuAnchorRect = rect;
   const backdrop = document.createElement('div');
   backdrop.className = 'context-menu-backdrop';
   backdrop.onclick = closeContextMenu;
@@ -1184,8 +1379,10 @@ function openNoteContextMenu(e, fileId){
   const menu = document.createElement('div');
   menu.className = 'context-menu';
   const archiveBtn = (n && n.type !== 'divider') ? `<button onclick="closeContextMenu(); archiveNote('${fileId}')">🗄 Archivieren</button>` : '';
+  const moveBtn = (n && n.type !== 'divider' && !isImportantBoard()) ? `<button onclick="closeContextMenu(); openMoveNoteMenu('${fileId}')">➡️ Verschieben</button>` : '';
   menu.innerHTML = `
     <button onclick="closeContextMenu(); openEditNoteModal('${fileId}')">✎ Bearbeiten</button>
+    ${moveBtn}
     ${archiveBtn}
     <button class="danger" onclick="closeContextMenu(); deleteNoteWithUndo('${fileId}')">🗑 Löschen</button>
   `;
@@ -1383,6 +1580,7 @@ function onPointerMove(e){
   drag.ghost.style.pointerEvents = 'none';
   const target = document.elementFromPoint(e.clientX, e.clientY);
   const targetCard = target && target.closest('.note[data-id]');
+  const targetHeader = target && target.closest('[data-day-header]');
   if(targetCard && targetCard.dataset.id !== drag.id){
     const targetId = targetCard.dataset.id;
     const ids = noteOrder.length ? noteOrder.slice() : Object.values(notesById).map(n=>n.fileId);
@@ -1390,6 +1588,19 @@ function onPointerMove(e){
     if(from!==-1 && to!==-1 && from!==to){
       ids.splice(from,1); ids.splice(to,0,drag.id);
       noteOrder = ids;
+      if(isImportantBoard()){
+        const draggedNote = notesById[drag.id], targetNote = notesById[targetId];
+        if(draggedNote && targetNote) draggedNote.dueDate = targetNote.dueDate || null;
+      }
+      renderBoard();
+    }
+  } else if(targetHeader && isImportantBoard()){
+    const dayKey = targetHeader.dataset.dayHeader;
+    const draggedNote = notesById[drag.id];
+    if(draggedNote){
+      draggedNote.dueDate = dayKey==='neutral' ? null : dayKey;
+      noteOrder = noteOrder.filter(id=>id!==drag.id);
+      noteOrder.unshift(drag.id);
       renderBoard();
     }
   }
@@ -1402,10 +1613,19 @@ function endDrag(persist){
   if(!drag) return;
   if(drag.longPressTimer) clearTimeout(drag.longPressTimer);
   const wasActive = drag.active;
+  const draggedId = drag.id;
   if(drag.ghost) drag.ghost.remove();
   document.body.style.userSelect = '';
   drag = null;
-  if(wasActive){ if(persist) saveOrder(); renderBoard(); }
+  if(wasActive){
+    if(persist){
+      saveOrder();
+      if(isImportantBoard() && notesById[draggedId]){
+        updateImportantDueDate(draggedId, notesById[draggedId].dueDate || null);
+      }
+    }
+    renderBoard();
+  }
 }
 
 // ---------- Add/edit note modal ----------
@@ -1574,7 +1794,7 @@ async function saveNote(){
     }
     if(isEdit && editingNoteId !== created.id){ delete notesById[editingNoteId]; }
     notesById[created.id] = { fileId:created.id, ...note };
-    if(!noteOrder.includes(created.id) && !isImportantBoard()){ noteOrder.push(created.id); saveOrder(); }
+    if(!noteOrder.includes(created.id) && !isImportantBoard()){ noteOrder.unshift(created.id); saveOrder(); }
     await syncImportantIndex(created.id, note.important);
     renderBoard(); closeAddModal(); showStatus(isEdit ? 'Notiz gespeichert' : 'Notiz angeheftet');
   }catch(err){
