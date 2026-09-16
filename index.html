@@ -86,6 +86,7 @@
     width:fit-content; max-width:230px; min-width:110px; position:relative; touch-action:pan-y;
   }
   .note img{max-width:100%; border-radius:3px; margin-bottom:6px; display:block; min-height:40px; background:#2a2a2a; pointer-events:none;}
+  .note audio{width:100%; margin-bottom:6px; max-width:210px;}
   .note .note-text{flex:1; white-space:pre-wrap;}
   .note a.note-link{color:#8fc6ff; font-weight:600; word-break:break-all;}
   .note .note-file-link{display:inline-block; margin-top:4px; padding:4px 8px; background:#2a2a2a; border-radius:4px; font-size:0.8rem; cursor:pointer; color:#fff;}
@@ -153,8 +154,8 @@
   .spinner{width:18px; height:18px; border:3px solid rgba(0,0,0,0.15); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
-  .checklist-item{ display:flex; align-items:center; gap:6px; margin:2px 0; }
-  .checklist-item input[type=checkbox]{ width:18px; height:18px; flex:none; }
+  .checklist-item{ display:flex; align-items:flex-start; gap:6px; margin:2px 0; }
+  .checklist-item input[type=checkbox]{ width:18px; height:18px; flex:none; margin-top:2px; }
   .checklist-item.done .checklist-text{ text-decoration:line-through; opacity:0.55; }
   .checklist-text{ flex:1; }
 
@@ -245,7 +246,9 @@
       <button type="button" class="comp-toggle" data-comp="link" onclick="toggleComponent('link')">🔗 Link</button>
       <button type="button" class="comp-toggle" data-comp="image" onclick="toggleComponent('image')">🖼️ Foto</button>
       <button type="button" class="comp-toggle" data-comp="file" onclick="toggleComponent('file')">📎 Datei</button>
+      <button type="button" class="comp-toggle" data-comp="audio" onclick="toggleComponent('audio')">🎤 Audio</button>
       <button type="button" class="comp-toggle" data-comp="checklist" onclick="toggleComponent('checklist')">☑️ Checkliste</button>
+      <button type="button" class="comp-toggle" data-comp="date" onclick="toggleComponent('date')">📅 Termin</button>
     </div>
     <div id="field-text"><textarea id="input-text" placeholder="Was möchtest du teilen?"></textarea></div>
     <div id="field-link" style="display:none;">
@@ -259,9 +262,21 @@
       <input type="file" id="input-file">
       <div class="hint">Wird in den Unterordner /anhaenge hochgeladen.</div>
     </div>
+    <div id="field-audio" style="display:none;">
+      <div id="audio-existing"></div>
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+        <button type="button" id="audio-record-btn" class="btn btn-secondary" onclick="startAudioRecording()">🎤 Aufnehmen</button>
+        <button type="button" id="audio-stop-btn" class="btn btn-secondary" style="display:none;" onclick="stopAudioRecording()">⏹ Stopp</button>
+        <span id="audio-status" class="hint" style="margin:0;"></span>
+      </div>
+      <div id="audio-preview"></div>
+    </div>
     <div id="field-checklist" style="display:none;">
       <div id="checklist-items-container"></div>
       <button type="button" class="add-checklist-item-btn" onclick="addChecklistItemRow()">+ Punkt hinzufügen</button>
+    </div>
+    <div id="field-date" style="display:none;">
+      <input type="date" id="input-date">
     </div>
     <div id="field-divider" style="display:none;">
       <input type="text" id="input-divider-text" placeholder="Beschriftung (optional)">
@@ -282,9 +297,9 @@
     <div class="color-swatches" id="board-color-swatches"></div>
     <label class="checkbox-row"><input type="checkbox" id="board-private-checkbox"> Nur für mich sichtbar (rein optisch, keine echte Zugriffssperre)</label>
     <div class="modal-actions">
-      <button class="btn btn-secondary" id="board-archive-btn" style="display:none; color:#000;" onclick="openArchiveModal()">Archiv</button>
-      <button class="btn btn-secondary" id="board-history-btn" style="display:none; color:#000;" onclick="openBackupHistory()">Verlauf</button>
-      <button class="btn btn-secondary" id="board-delete-btn" style="display:none; margin-right:auto; color:#b23;" onclick="deleteBoard()">Board löschen</button>
+      <button class="btn btn-secondary" id="board-archive-btn" style="display:none; color:#000; padding:8px 12px;" onclick="openArchiveModal()" title="Archiv">🗄</button>
+      <button class="btn btn-secondary" id="board-history-btn" style="display:none; color:#000; padding:8px 12px;" onclick="openBackupHistory()" title="Verlauf">🕐</button>
+      <button class="btn btn-secondary" id="board-delete-btn" style="display:none; margin-right:auto; color:#b23; padding:8px 12px;" onclick="deleteBoard()" title="Board löschen">🗑</button>
       <button class="btn btn-secondary" onclick="closeBoardModal()">Abbrechen</button>
       <button class="btn btn-primary" id="board-save-btn" onclick="saveBoardModal()">Erstellen</button>
     </div>
@@ -846,6 +861,8 @@ function archivePreviewText(n){
   if(n.items && n.items.length) return '☑️ '+n.items.length+' Punkte';
   if(n.imageAttachmentName) return '🖼️ '+n.imageAttachmentName;
   if(n.fileAttachmentName) return '📎 '+n.fileAttachmentName;
+  if(n.audioAttachmentName) return '🎤 Audioaufnahme';
+  if(n.appointmentDate) return '📅 '+n.appointmentDate;
   return '(leer)';
 }
 async function openArchiveModal(){
@@ -1099,7 +1116,7 @@ async function startBoard(){
 function notesSignature(){
   const parts = Object.keys(notesById).sort().map(k=>{
     const n = notesById[k];
-    return [k, n.type, n.text, n.url, n.imageAttachmentPath, n.fileAttachmentPath, n.important, JSON.stringify(n.items||[])].join('~');
+    return [k, n.type, n.text, n.url, n.imageAttachmentPath, n.fileAttachmentPath, n.audioAttachmentPath, n.appointmentDate, n.important, JSON.stringify(n.items||[])].join('~');
   });
   return parts.join('|') + '##' + noteOrder.join(',');
 }
@@ -1248,6 +1265,17 @@ function renderNote(n){
   if(n.fileAttachmentPath){
     parts.push(`<div class="note-text">📎 ${escapeHtml(n.fileAttachmentName||'Datei')}
       <br><span class="note-file-link" onclick="downloadAttachment('${n.fileAttachmentPath}','${escapeAttr(n.fileAttachmentName||'datei')}','${origin}')">Herunterladen</span></div>`);
+  }
+  if(n.audioAttachmentPath){
+    const cachedAudio = imageCache[n.audioAttachmentPath];
+    parts.push(cachedAudio
+      ? `<audio controls src="${cachedAudio}"></audio>`
+      : `<button type="button" class="note-file-link" onclick="loadAudioAttachment(this,'${n.audioAttachmentPath}','${origin}')">🎤 Audio abspielen</button>`);
+  }
+  if(n.appointmentDate){
+    const isPast = n.appointmentDate < isoDateLocal(new Date());
+    const [ay,am,ad] = n.appointmentDate.split('-');
+    parts.push(`<div class="note-text" style="color:${isPast?'#ff8080':'#7be07b'}; font-weight:600;">📅 ${ad}.${am}.${ay}</div>`);
   }
   if(n.items && n.items.length){
     parts.push(n.items.map(it=>`
@@ -1628,6 +1656,54 @@ function endDrag(persist){
   }
 }
 
+// ---------- Audioaufnahme ----------
+let audioRecorder = null, audioChunks = [], audioBlob = null, audioStream = null;
+async function startAudioRecording(){
+  try{
+    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    audioRecorder = new MediaRecorder(audioStream);
+    audioRecorder.ondataavailable = e => { if(e.data.size>0) audioChunks.push(e.data); };
+    audioRecorder.onstop = () => {
+      audioBlob = new Blob(audioChunks, { type: audioRecorder.mimeType || 'audio/webm' });
+      renderAudioPreview();
+      audioStream.getTracks().forEach(t=>t.stop());
+    };
+    audioRecorder.start();
+    document.getElementById('audio-record-btn').style.display = 'none';
+    document.getElementById('audio-stop-btn').style.display = 'inline-block';
+    document.getElementById('audio-status').textContent = '🔴 Aufnahme läuft…';
+  }catch(e){
+    alert('Mikrofonzugriff nicht möglich: '+e.message);
+  }
+}
+function stopAudioRecording(){
+  if(audioRecorder && audioRecorder.state!=='inactive') audioRecorder.stop();
+  document.getElementById('audio-record-btn').style.display = 'inline-block';
+  document.getElementById('audio-stop-btn').style.display = 'none';
+}
+function renderAudioPreview(){
+  const el = document.getElementById('audio-preview');
+  if(audioBlob){
+    const url = URL.createObjectURL(audioBlob);
+    el.innerHTML = `<audio controls src="${url}" style="width:100%;"></audio> <button type="button" class="btn btn-secondary" onclick="discardAudioRecording()">✕ Verwerfen</button>`;
+    document.getElementById('audio-status').textContent = 'Neue Aufnahme bereit';
+  } else { el.innerHTML = ''; document.getElementById('audio-status').textContent = ''; }
+}
+function discardAudioRecording(){ audioBlob = null; renderAudioPreview(); }
+async function loadAudioAttachment(btn, path, origin){
+  btn.textContent = 'Lädt…'; btn.disabled = true;
+  try{
+    const res = await graphFetchRaw(`/drives/${containerRef.driveId}/items/${origin}:/${ATTACH_SUBFOLDER}/${encodeURIComponent(path)}:/content`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    imageCache[path] = url;
+    const audio = document.createElement('audio');
+    audio.controls = true; audio.src = url; audio.style.width = '100%';
+    btn.replaceWith(audio);
+  }catch(e){ btn.textContent = '🎤 Fehler – erneut versuchen'; btn.disabled = false; }
+}
+
 // ---------- Add/edit note modal ----------
 let noteMode = 'note'; // 'note' | 'divider'
 let activeComponents = new Set(['text']);
@@ -1674,14 +1750,26 @@ function renderChecklistDraft(){
   if(!el) return;
   el.innerHTML = checklistItemsDraft.map(it=>`
     <div class="modal-checklist-row">
-      <input type="text" value="${escapeAttr(it.text)}" placeholder="Punkt..." oninput="updateChecklistDraftText('${it.id}', this.value)">
+      <input type="text" value="${escapeAttr(it.text)}" placeholder="Punkt..." oninput="updateChecklistDraftText('${it.id}', this.value)" onkeydown="handleChecklistKeydown(event,'${it.id}')">
       <button type="button" onclick="removeChecklistItemRow('${it.id}')" title="Entfernen">✕</button>
     </div>
   `).join('');
 }
+function handleChecklistKeydown(e, id){
+  if(e.key !== 'Enter') return;
+  e.preventDefault();
+  const idx = checklistItemsDraft.findIndex(x=>x.id===id);
+  const isLast = idx === checklistItemsDraft.length-1;
+  if(isLast) addChecklistItemRow();
+  setTimeout(()=>{
+    const rows = document.querySelectorAll('#checklist-items-container .modal-checklist-row input[type=text]');
+    if(rows[idx+1]) rows[idx+1].focus();
+  }, 20);
+}
 function openAddModal(){
   editingNoteId = null;
   checklistItemsDraft = [];
+  audioBlob = null;
   activeComponents = new Set(['text']);
   document.getElementById('note-modal-title').textContent = 'Neue Notiz';
   document.getElementById('save-note-btn').textContent = 'Anheften';
@@ -1689,8 +1777,11 @@ function openAddModal(){
   document.getElementById('input-link').value = '';
   document.getElementById('input-image').value = '';
   document.getElementById('input-file').value = '';
+  document.getElementById('input-date').value = '';
   document.getElementById('input-divider-text').value = '';
   document.getElementById('input-important').checked = false;
+  document.getElementById('audio-existing').innerHTML = '';
+  renderAudioPreview();
   setNoteMode('note');
   document.getElementById('add-modal').style.display = 'flex';
 }
@@ -1698,11 +1789,15 @@ function openEditNoteModal(fileId){
   const n = notesById[fileId];
   if(!n) return;
   editingNoteId = fileId;
+  audioBlob = null;
   document.getElementById('note-modal-title').textContent = 'Notiz bearbeiten';
   document.getElementById('save-note-btn').textContent = 'Speichern';
   document.getElementById('input-important').checked = !!n.important;
   document.getElementById('input-image').value = '';
   document.getElementById('input-file').value = '';
+  document.getElementById('input-date').value = n.appointmentDate || '';
+  document.getElementById('audio-existing').innerHTML = '';
+  renderAudioPreview();
   if(n.type === 'divider'){
     document.getElementById('input-divider-text').value = n.text||'';
     setNoteMode('divider');
@@ -1712,13 +1807,20 @@ function openEditNoteModal(fileId){
     if(n.url) activeComponents.add('link');
     if(n.imageAttachmentPath) activeComponents.add('image');
     if(n.fileAttachmentPath) activeComponents.add('file');
+    if(n.audioAttachmentPath) activeComponents.add('audio');
     if(n.items && n.items.length) activeComponents.add('checklist');
+    if(n.appointmentDate) activeComponents.add('date');
     if(!activeComponents.size) activeComponents.add('text');
     document.getElementById('input-text').value = n.text||'';
     document.getElementById('input-link').value = n.url||'';
     checklistItemsDraft = (n.items||[]).map(it=>({...it}));
     setNoteMode('note');
     renderChecklistDraft();
+    if(n.audioAttachmentPath){
+      const origin = n.originItemId || boardRef.itemId;
+      document.getElementById('audio-existing').innerHTML =
+        `<button type="button" class="note-file-link" style="color:#000;" onclick="loadAudioAttachment(this,'${n.audioAttachmentPath}','${origin}')">🎤 Vorhandene Aufnahme abspielen</button>`;
+    }
   }
   document.getElementById('add-modal').style.display = 'flex';
 }
@@ -1729,9 +1831,13 @@ function closeAddModal(){
   document.getElementById('input-divider-text').value = '';
   document.getElementById('input-image').value = '';
   document.getElementById('input-file').value = '';
+  document.getElementById('input-date').value = '';
   document.getElementById('input-important').checked = false;
+  document.getElementById('audio-existing').innerHTML = '';
   editingNoteId = null;
   checklistItemsDraft = [];
+  audioBlob = null;
+  renderAudioPreview();
   activeComponents = new Set(['text']);
   setNoteMode('note');
 }
@@ -1754,7 +1860,7 @@ async function saveNote(){
     if(noteMode === 'divider'){
       note.text = document.getElementById('input-divider-text').value.trim();
     } else {
-      if(activeComponents.size===0) throw new Error('Bitte mindestens einen Baustein wählen (Text, Link, Foto, Datei oder Checkliste).');
+      if(activeComponents.size===0) throw new Error('Bitte mindestens einen Baustein wählen (Text, Link, Foto, Datei, Audio, Checkliste oder Termin).');
       if(activeComponents.has('text')){
         note.text = document.getElementById('input-text').value.trim();
       }
@@ -1774,12 +1880,27 @@ async function saveNote(){
         else if(existing && existing.fileAttachmentPath){ note.fileAttachmentName = existing.fileAttachmentName; note.fileAttachmentPath = existing.fileAttachmentPath; }
         else throw new Error('Bitte Datei auswählen oder den Datei-Baustein wieder abwählen.');
       }
+      if(activeComponents.has('audio')){
+        if(audioBlob){
+          note.audioAttachmentName = 'aufnahme.webm';
+          note.audioAttachmentPath = id+'_audio.webm';
+          await uploadAttachment(new File([audioBlob], note.audioAttachmentName, { type: audioBlob.type||'audio/webm' }), note.audioAttachmentPath, targetFolderId);
+        } else if(existing && existing.audioAttachmentPath){
+          note.audioAttachmentName = existing.audioAttachmentName; note.audioAttachmentPath = existing.audioAttachmentPath;
+        } else {
+          throw new Error('Bitte eine Audioaufnahme erstellen oder den Audio-Baustein wieder abwählen.');
+        }
+      }
       if(activeComponents.has('checklist')){
         const items = checklistItemsDraft.map(it=>({ id:it.id, text:it.text.trim(), done:!!it.done })).filter(it=>it.text);
         if(!items.length) throw new Error('Bitte mindestens einen Checklisten-Punkt hinzufügen oder den Checklisten-Baustein wieder abwählen.');
         note.items = items;
       }
-      const hasAnything = note.text || note.url || note.imageAttachmentPath || note.fileAttachmentPath || (note.items && note.items.length);
+      if(activeComponents.has('date')){
+        note.appointmentDate = document.getElementById('input-date').value;
+        if(!note.appointmentDate) throw new Error('Bitte ein Termin-Datum wählen oder den Termin-Baustein wieder abwählen.');
+      }
+      const hasAnything = note.text || note.url || note.imageAttachmentPath || note.fileAttachmentPath || note.audioAttachmentPath || note.appointmentDate || (note.items && note.items.length);
       if(!hasAnything) throw new Error('Bitte mindestens einen Inhalt hinzufügen.');
     }
     let created;
