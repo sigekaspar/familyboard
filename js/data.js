@@ -41,7 +41,7 @@ function normalizeNote(n){
   return norm;
 }
 // Felder, die nur in der App existieren und nicht in die Datei gehören
-const TRANSIENT_FIELDS = ['fileId', 'eTag', 'cTag', 'dueDate', 'originFolderName', 'pending', 'pendingKind'];
+const TRANSIENT_FIELDS = ['fileId', 'eTag', 'cTag', 'dueDate', 'dueTime', 'originFolderName', 'pending', 'pendingKind'];
 function noteToFile(n){
   const out = { ...n };
   TRANSIENT_FIELDS.forEach(k => delete out[k]);
@@ -119,7 +119,7 @@ async function refreshBoardsList(){
   }
   const all = folders.map(f => {
     const m = boardsMeta[f.name] || {};
-    return { folderName: f.name, itemId: f.id, driveId: containerRef.driveId, color: m.color || BOARD_COLORS[0], visibility: m.visibility || 'shared', owner: m.owner || null };
+    return { folderName: f.name, itemId: f.id, driveId: containerRef.driveId, color: m.color || BOARD_COLORS[0], visibility: m.visibility || 'shared', owner: m.owner || null, hidden: !!m.hidden };
   });
   const orderArr = boardsMeta._order || [];
   all.sort((a, b) => {
@@ -406,11 +406,20 @@ async function removeImportantIds(ids){
   const set = new Set(ids);
   await importantIndexUpdate(list => list.some(x => set.has(x.id)) ? list.filter(x => !set.has(x.id)) : undefined);
 }
-async function setImportantDueDate(noteId, dueDate){
+// dueTime: undefined = Uhrzeit unverändert lassen, null = Uhrzeit entfernen
+async function setImportantDueDate(noteId, dueDate, dueTime){
   await importantIndexUpdate(list => {
     const entry = list.find(x => x.id === noteId);
-    if(entry){ if(entry.dueDate === dueDate) return undefined; entry.dueDate = dueDate; }
-    else list.push({ id: noteId, dueDate });
+    if(entry){
+      const sameTime = dueTime === undefined || (entry.dueTime || null) === dueTime;
+      if(entry.dueDate === dueDate && sameTime) return undefined;
+      entry.dueDate = dueDate;
+      if(dueTime !== undefined){ if(dueTime) entry.dueTime = dueTime; else delete entry.dueTime; }
+    } else {
+      const e = { id: noteId, dueDate };
+      if(dueTime) e.dueTime = dueTime;
+      list.push(e);
+    }
     return list;
   });
 }
@@ -434,7 +443,7 @@ async function loadImportantFromServer(prev){
     if(!r) return;
     if(r.status === 404){ gone.push(entry.id); return; }
     const old = prevNotes[entry.id];
-    if(r.status !== 200){ if(old) fresh[entry.id] = { ...old, dueDate: entry.dueDate || null }; return; }
+    if(r.status !== 200){ if(old) fresh[entry.id] = { ...old, dueDate: entry.dueDate || null, dueTime: entry.dueTime || null }; return; }
     const item = r.body;
     const parent = item.parentReference || {};
     if(parent.path && /\/(_archive|_backups)(\/|$)/.test(parent.path)){ gone.push(entry.id); return; }
@@ -447,6 +456,7 @@ async function loadImportantFromServer(prev){
     }
     n.originItemId = parent.id;
     n.dueDate = entry.dueDate || null;
+    n.dueTime = entry.dueTime || null;
     fresh[entry.id] = n;
   });
   if(gone.length) removeImportantIds(gone).catch(e => console.warn('Aufräumen von Wichtig fehlgeschlagen', e));
@@ -459,7 +469,7 @@ async function loadImportantFromServer(prev){
   return { notesById: fresh, noteOrder: order, deltaLink: null, orderCTag: res.eTag };
 }
 
-// ---------- Tägliches Backup (30 Tage Verlauf, ohne Anhänge) ----------
+// ---------- Tägliches Backup (30 Tage täglich, danach wöchentlich; ohne Anhänge) ----------
 async function maybeRunDailyBackup(board){
   if(!board || board.folderName === IMPORTANT_BOARD_NAME || !isOnline) return;
   const today = todayStr();
@@ -493,12 +503,32 @@ async function copyBoardNotesTo(board, parentId, folderName){
   }).catch(e => console.warn('Backup-Kopie fehlgeschlagen', item.name, e)));
   return true;
 }
+// Welche Tages-Sicherungen bleiben? Behalten wird alles, was die bisherige Regel behalten hat
+// (die neuesten BACKUP_RETENTION_DAYS Ordner), dazu alles aus den letzten BACKUP_DAILY_DAYS Tagen
+// und von älteren Wochen jeweils die neueste Sicherung – bis BACKUP_WEEKLY_WEEKS zurück.
+function backupDaysToKeep(dayNames, today){
+  const sorted = dayNames.filter(n => /^\d{4}-\d{2}-\d{2}$/.test(n)).sort();
+  const keep = new Set(sorted.slice(-BACKUP_RETENTION_DAYS)); // alte Regel: nie weniger als bisher
+  const toDate = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
+  const t = toDate(today);
+  const ageDays = iso => Math.round((t - toDate(iso)) / 86400000);
+  const weekKey = iso => { const d = toDate(iso); const day = (d.getDay() + 6) % 7; d.setDate(d.getDate() - day); return isoDateLocal(d); };
+  const newestOfWeek = {};
+  for(const n of sorted){
+    const age = ageDays(n);
+    if(age <= BACKUP_DAILY_DAYS) keep.add(n);
+    else if(age <= BACKUP_WEEKLY_WEEKS * 7) newestOfWeek[weekKey(n)] = n; // sortiert -> der letzte gewinnt
+  }
+  Object.values(newestOfWeek).forEach(n => keep.add(n));
+  return keep;
+}
 async function cleanupOldBackups(driveId, backupFolderId){
   try{
     const res = await graphListAll(`/drives/${driveId}/items/${backupFolderId}/children?$select=id,name,folder&$top=500`);
     const days = res.filter(it => it.folder && /^\d{4}-\d{2}-\d{2}$/.test(it.name)).sort((a, b) => a.name.localeCompare(b.name));
     const safety = res.filter(it => it.folder && it.name.startsWith(SAFETY_BACKUP_PREFIX)).sort((a, b) => a.name.localeCompare(b.name));
-    const toDelete = days.slice(0, Math.max(0, days.length - BACKUP_RETENTION_DAYS))
+    const keepDays = backupDaysToKeep(days.map(d => d.name), todayStr());
+    const toDelete = days.filter(d => !keepDays.has(d.name))
       .concat(safety.slice(0, Math.max(0, safety.length - SAFETY_BACKUP_KEEP)));
     for(const d of toDelete) await graphFetchRaw(`/drives/${driveId}/items/${d.id}`, { method:'DELETE' }).catch(() => {});
   }catch(e){}

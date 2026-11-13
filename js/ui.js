@@ -11,6 +11,30 @@ function safeUrl(raw){
   if(/^[a-z][a-z0-9+.-]*:/i.test(s)) return ''; // anderes Schema -> blockieren
   return 'https://' + s.replace(/^\/+/, '');
 }
+// Text sicher anzeigen und darin enthaltene Web-Adressen anklickbar machen
+const URL_IN_TEXT = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+function linkifyText(raw){
+  const s = String(raw == null ? '' : raw);
+  let out = '', last = 0, m;
+  URL_IN_TEXT.lastIndex = 0;
+  while((m = URL_IN_TEXT.exec(s))){
+    let url = m[0];
+    // Satzzeichen am Ende gehören meist nicht zur Adresse
+    const trail = /[.,;:!?)\]]+$/.exec(url);
+    if(trail && !(trail[0].startsWith(')') && url.includes('('))) url = url.slice(0, url.length - trail[0].length);
+    const href = safeUrl(url);
+    out += escapeHtml(s.slice(last, m.index));
+    out += href ? `<a class="note-link" href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(url)}</a>` : escapeHtml(url);
+    last = m.index + url.length;
+    URL_IN_TEXT.lastIndex = last;
+  }
+  return out + escapeHtml(s.slice(last));
+}
+function isLongText(t){ return !!t && (t.length > COLLAPSE_CHARS || t.split('\n').length > COLLAPSE_LINES); }
+function validTime(t){ return typeof t === 'string' && /^\d{2}:\d{2}$/.test(t); }
+// Nur Anzeige-Zustand (pro Gerät, nicht gespeichert): ausgeklappte lange Texte / sichtbare erledigte Punkte
+const expandedNotes = new Set();
+const expandedDone = new Set();
 function $(id){ return document.getElementById(id); }
 function showStatus(msg, ms = 2500){
   const el = $('status-bar');
@@ -168,7 +192,9 @@ function renderBoardTabs(){
   const el = $('board-tabs');
   if(!boardsList.length){ el.style.display = 'none'; return; }
   el.style.display = 'flex';
-  el.innerHTML = boardsList.map(b => {
+  // Ausgeblendete Boards erscheinen nicht als Tab (ausser gerade geöffnet) – Inhalt bleibt unverändert erhalten
+  const hiddenCount = boardsList.filter(b => b.hidden && b.folderName !== boardRef.folderName).length;
+  el.innerHTML = boardsList.filter(b => !b.hidden || b.folderName === boardRef.folderName).map(b => {
     const isActive = b.folderName === boardRef.folderName;
     const isSpecial = b.folderName === IMPORTANT_BOARD_NAME;
     const name = escapeAttr(b.folderName);
@@ -177,7 +203,7 @@ function renderBoardTabs(){
       ${isActive ? `<button class="board-tab-settings" data-action="edit-board" data-board="${name}" title="Board bearbeiten">⚙</button>` : ''}
     </div>`;
   }).join('')
-    + `<button class="board-tab-add" data-action="manage-boards" title="Boards verwalten / Reihenfolge ändern">☰</button>`
+    + `<button class="board-tab-add" data-action="manage-boards" title="Boards verwalten / Reihenfolge ändern${hiddenCount ? ' (' + hiddenCount + ' ausgeblendet)' : ''}" aria-label="Boards verwalten">☰</button>`
     + `<button class="board-tab-add" data-action="add-board" title="Neues Board hinzufügen">+</button>`;
   const activeTab = el.querySelector('.board-tab.active');
   if(activeTab) activeTab.scrollIntoView({ inline:'center', block:'nearest' });
@@ -188,9 +214,10 @@ function openManageBoardsModal(){ renderManageBoardsList(); $('manage-boards-mod
 function closeManageBoardsModal(){ $('manage-boards-modal').style.display = 'none'; }
 function renderManageBoardsList(){
   $('manage-boards-list').innerHTML = boardsList.map((b, i) => `
-    <div class="manage-board-row">
+    <div class="manage-board-row${b.hidden ? ' is-hidden' : ''}">
       <span class="swatch" style="background:${escapeAttr(b.color)};"></span>
-      <span class="name">${b.folderName === IMPORTANT_BOARD_NAME ? '⭐ ' : ''}${escapeHtml(b.folderName)}</span>
+      <span class="name">${b.folderName === IMPORTANT_BOARD_NAME ? '⭐ ' : ''}${escapeHtml(b.folderName)}${b.hidden ? ' <small>(ausgeblendet)</small>' : ''}</span>
+      <button data-action="toggle-board-hidden" data-board="${escapeAttr(b.folderName)}" title="${b.hidden ? 'Wieder als Tab anzeigen' : 'Als Tab ausblenden'}" aria-label="${b.hidden ? 'Einblenden' : 'Ausblenden'}">${b.hidden ? '🙈' : '👁'}</button>
       <button data-action="move-board" data-board="${escapeAttr(b.folderName)}" data-dir="-1" ${i === 0 ? 'disabled' : ''} title="Nach oben">↑</button>
       <button data-action="move-board" data-board="${escapeAttr(b.folderName)}" data-dir="1" ${i === boardsList.length - 1 ? 'disabled' : ''} title="Nach unten">↓</button>
     </div>`).join('');
@@ -576,7 +603,12 @@ function renderNote(n, opts = {}){
     </div>`;
   }
   const parts = [];
-  if(n.text) parts.push(`<div class="note-text">${escapeHtml(n.text)}</div>`);
+  if(n.text){
+    const long = isLongText(n.text);
+    const expanded = expandedNotes.has(n.fileId);
+    parts.push(`<div class="note-text${long && !expanded ? ' clamped' : ''}">${linkifyText(n.text)}</div>`);
+    if(long) parts.push(`<button type="button" class="note-expand" data-action="toggle-expand" data-id="${id}">${expanded ? '▲ weniger' : '▼ mehr anzeigen'}</button>`);
+  }
   if(n.url){
     const href = safeUrl(n.url);
     parts.push(href
@@ -604,14 +636,25 @@ function renderNote(n, opts = {}){
   if(n.appointmentDate && /^\d{4}-\d{2}-\d{2}$/.test(n.appointmentDate)){
     const isPast = n.appointmentDate < isoDateLocal(new Date());
     const [ay, am, ad] = n.appointmentDate.split('-');
-    parts.push(`<div class="note-text" style="color:${isPast ? '#ff8080' : '#7be07b'}; font-weight:600;">📅 ${ad}.${am}.${ay}</div>`);
+    const t = validTime(n.appointmentTime) ? ' · ' + n.appointmentTime : '';
+    parts.push(`<div class="note-text" style="color:${isPast ? '#ff8080' : '#7be07b'}; font-weight:600;">📅 ${ad}.${am}.${ay}${t}</div>`);
   }
   if(n.items && n.items.length){
-    parts.push(n.items.map(it => `
+    const itemHtml = it => `
       <label class="checklist-item ${it.done ? 'done' : ''}">
         <input type="checkbox" ${it.done ? 'checked' : ''} data-action="toggle-item" data-id="${id}" data-item="${escapeAttr(it.id)}">
-        <span class="checklist-text">${escapeHtml(it.text)}</span>
-      </label>`).join(''));
+        <span class="checklist-text">${linkifyText(it.text)}</span>
+      </label>`;
+    const open = n.items.filter(it => !it.done), done = n.items.filter(it => it.done);
+    // Fortschritt nur anzeigen, wenn es mehr als einen Punkt gibt
+    if(n.items.length > 1) parts.push(`<div class="checklist-progress">${done.length}/${n.items.length}</div>`);
+    parts.push(open.map(itemHtml).join(''));
+    if(done.length){
+      // Erledigte Punkte werden unten eingeklappt angezeigt (nichts wird gelöscht)
+      const showDone = expandedDone.has(n.fileId);
+      parts.push(`<button type="button" class="checklist-done-toggle" data-action="toggle-done-items" data-id="${id}">${showDone ? '▲' : '▼'} ${done.length} erledigt</button>`);
+      if(showDone) parts.push(done.map(itemHtml).join(''));
+    }
   }
   const lastEditorEmail = n.editedByEmail || n.authorEmail;
   if(lastEditorEmail && me.email && lastEditorEmail !== me.email){
@@ -625,9 +668,18 @@ function renderNote(n, opts = {}){
     const bg = opts.boardColor || (originBoard ? originBoard.color : '#333333');
     cardStyle = ` style="background:${escapeAttr(bg)}; color:${contrastColor(bg)};"`;
   }
-  return `<div class="note${n.pending ? ' pending' : ''}" data-id="${id}"${cardStyle}>
+  const onImportant = isImportantBoard() && !opts.static;
+  let timeBadge = '';
+  if(onImportant){
+    const datePart = opts.overdue && /^\d{4}-\d{2}-\d{2}$/.test(n.dueDate || '') ? `📅 ${n.dueDate.slice(8, 10)}.${n.dueDate.slice(5, 7)}.` : '';
+    const timePart = validTime(n.dueTime) ? `🕐 ${escapeHtml(n.dueTime)}` : '';
+    if(datePart || timePart) timeBadge = `<span class="due-time-badge${opts.overdue ? ' overdue' : ''}">${[datePart, timePart].filter(Boolean).join(' ')}</span>`;
+  }
+  const doneBadge = n.done ? '<span class="done-badge" title="Erledigt">✓ erledigt</span>' : '';
+  return `<div class="note${n.pending ? ' pending' : ''}${n.done ? ' done-card' : ''}${onImportant ? ' wichtig-card' : ''}" data-id="${id}"${cardStyle}>
     ${n.important ? '<span class="important-badge" title="Auch in \'Wichtig\'">⭐</span>' : ''}
-    <div class="note-actions"><button data-action="note-menu" data-id="${id}" title="Menü">⋮</button></div>
+    <div class="note-actions">${onImportant && !n.pending ? `<button data-action="important-done" data-id="${id}" title="Erledigt" aria-label="Erledigt">✓</button>` : ''}<button data-action="note-menu" data-id="${id}" title="Menü" aria-label="Menü">⋮</button></div>
+    ${timeBadge}${doneBadge}
     ${parts.join('')}
     ${n.pending ? '<span class="pending-badge" title="Wird übertragen, sobald du online bist">⏳</span>' : ''}
   </div>`;
@@ -648,8 +700,19 @@ function dayHeaderLabel(iso){
   return `${weekday}, ${datePart}`;
 }
 function bucketKeyFor(dueDate, days){
-  if(!dueDate || dueDate < days[0]) return 'neutral'; // vergangene Tage rutschen automatisch ins Allgemeine
-  return days.includes(dueDate) ? dueDate : 'neutral';
+  if(!dueDate) return 'neutral';
+  if(dueDate < days[0]) return 'overdue'; // vergangene Tage: eigener Bereich "Überfällig" (Datum bleibt erhalten)
+  return days.includes(dueDate) ? dueDate : 'neutral'; // weiter als 7 Tage entfernt -> Allgemein
+}
+function timeSort(list){
+  // Innerhalb eines Tages: Karten mit Uhrzeit zuerst, nach Zeit sortiert; sonst manuelle Reihenfolge
+  return list.map((n, i) => ({ n, i })).sort((a, b) => {
+    const ta = validTime(a.n.dueTime) ? a.n.dueTime : null, tb = validTime(b.n.dueTime) ? b.n.dueTime : null;
+    if(ta && tb && ta !== tb) return ta.localeCompare(tb);
+    if(ta && !tb) return -1;
+    if(!ta && tb) return 1;
+    return a.i - b.i;
+  }).map(x => x.n);
 }
 function renderImportantBoardGrid(){
   const grid = $('board-grid');
@@ -662,11 +725,17 @@ function renderImportantBoardGrid(){
   const byId = {}; all.forEach(n => byId[n.fileId] = n);
   const orderedIds = noteOrder.filter(id => byId[id]);
   all.forEach(n => { if(!orderedIds.includes(n.fileId)) orderedIds.push(n.fileId); });
-  const buckets = { neutral: [] };
+  const buckets = { neutral: [], overdue: [] };
   days.forEach(d => buckets[d] = []);
   orderedIds.forEach(id => buckets[bucketKeyFor(byId[id].dueDate, days)].push(byId[id]));
-  let html = renderDayHeader('neutral', 'Allgemein') + buckets.neutral.map(n => renderNote(n)).join('');
-  days.forEach(d => { html += renderDayHeader(d, dayHeaderLabel(d)) + buckets[d].map(n => renderNote(n)).join(''); });
+  let html = '';
+  if(buckets.overdue.length){
+    // Überfällig: nach Datum (ältestes zuerst); Überschrift ist kein Ablageziel
+    const overdue = buckets.overdue.slice().sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '') || (a.dueTime || '').localeCompare(b.dueTime || ''));
+    html += `<div class="day-header overdue-header">⚠ Überfällig (${overdue.length})</div>` + overdue.map(n => renderNote(n, { overdue:true })).join('');
+  }
+  html += renderDayHeader('neutral', 'Allgemein') + buckets.neutral.map(n => renderNote(n)).join('');
+  days.forEach(d => { html += renderDayHeader(d, dayHeaderLabel(d)) + timeSort(buckets[d]).map(n => renderNote(n)).join(''); });
   grid.innerHTML = html;
   observeImages();
 }
@@ -781,9 +850,16 @@ function openNoteContextMenu(btn, fileId){
       <button class="danger" data-action="delete-note" data-id="${id}">🗑 Löschen</button>`);
     return;
   }
+  const isCard = n.type !== 'divider';
+  const hasDate = (n.appointmentDate && /^\d{4}-\d{2}-\d{2}$/.test(n.appointmentDate)) || (isImportantBoard() && n.dueDate);
   showMenu(lastMenuAnchorRect, `
     <button data-action="edit-note" data-id="${id}">✎ Bearbeiten</button>
-    ${n.type !== 'divider' ? `<button data-action="toggle-important" data-id="${id}">${n.important ? '☆ Nicht mehr wichtig' : '⭐ Wichtig'}</button>` : ''}
+    ${isCard ? `<button data-action="toggle-done" data-id="${id}">${n.done ? '↺ Nicht mehr erledigt' : '✓ Erledigt'}</button>` : ''}
+    ${isCard && n.text && n.text.trim() ? `<button data-action="text-to-checklist" data-id="${id}">☑️ Text → Checkliste</button>` : ''}
+    ${isCard && isImportantBoard() ? `<button data-action="open-due" data-id="${id}">📅 Tag &amp; Uhrzeit</button>` : ''}
+    ${isCard && hasDate ? `<button data-action="export-ics" data-id="${id}">📆 In Kalender</button>` : ''}
+    ${isCard && n.audioAttachmentPath ? `<button data-action="transcribe-note" data-id="${id}">📝 Audio → Text</button>` : ''}
+    ${isCard ? `<button data-action="toggle-important" data-id="${id}">${n.important ? '☆ Nicht mehr wichtig' : '⭐ Wichtig'}</button>` : ''}
     ${n.type !== 'divider' && !isImportantBoard() ? `<button data-action="move-menu" data-id="${id}">➡️ Verschieben</button>` : ''}
     ${n.type !== 'divider' ? `<button data-action="archive-note" data-id="${id}">🗄 Archivieren</button>` : ''}
     <button class="danger" data-action="delete-note" data-id="${id}">🗑 Löschen</button>`);
@@ -871,7 +947,7 @@ async function toggleChecklistItem(fileId, itemId){
     }, before);
     const cur = notesById[fileId];
     if(cur){
-      notesById[fileId] = { ...normalizeNote(res.data), fileId, originItemId: cur.originItemId, dueDate: cur.dueDate,
+      notesById[fileId] = { ...normalizeNote(res.data), fileId, originItemId: cur.originItemId, dueDate: cur.dueDate, dueTime: cur.dueTime,
         eTag: res.item ? res.item.eTag : cur.eTag, cTag: res.item ? res.item.cTag : cur.cTag };
     }
     persistBoardCache(boardRef.folderName);
@@ -1070,7 +1146,7 @@ let dragEndedAt = 0;
 function onNotePointerDown(e){
   const el = e.target.closest('.note[data-id]');
   if(!el || el.classList.contains('drag-placeholder')) return;
-  if(e.target.closest('button, a, input, audio, label.checklist-item')) return;
+  if(e.target.closest('button, a, input, audio, label.checklist-item, summary, details')) return;
   if(searchState.query || searchState.all) return;
   if(e.pointerType === 'mouse' && e.button !== 0) return;
   drag = { id: el.dataset.id, startX: e.clientX, startY: e.clientY, pointerType: e.pointerType, active: false };
@@ -1205,6 +1281,7 @@ function renderAudioPreview(){
     el.innerHTML = `<audio controls src="${audioPreviewUrl}" style="width:100%;"></audio> <button type="button" class="btn btn-secondary" data-action="discard-audio">✕ Verwerfen</button>`;
     $('audio-status').textContent = 'Neue Aufnahme bereit';
   } else { el.innerHTML = ''; $('audio-status').textContent = ''; }
+  if(typeof updateTranscribeButton === 'function') updateTranscribeButton();
 }
 function discardAudioRecording(){ audioBlob = null; renderAudioPreview(); }
 function stopRecordingIfRunning(){
@@ -1267,7 +1344,8 @@ $('checklist-items-container').addEventListener('keydown', e => {
   setTimeout(() => { const rows = document.querySelectorAll('#checklist-items-container input[type=text]'); if(rows[idx + 1]) rows[idx + 1].focus(); }, 20);
 });
 function resetNoteForm(){
-  ['input-text', 'input-link', 'input-image', 'input-file', 'input-date', 'input-divider-text'].forEach(id => $(id).value = '');
+  ['input-text', 'input-link', 'input-image', 'input-file', 'input-date', 'input-date-time', 'input-divider-text'].forEach(id => $(id).value = '');
+  if(typeof resetTranscribeUi === 'function') resetTranscribeUi();
   $('input-important').checked = false;
   $('audio-existing').innerHTML = '';
   audioBlob = null;
@@ -1294,6 +1372,7 @@ function openEditNoteModal(fileId){
   $('save-note-btn').textContent = 'Speichern';
   $('input-important').checked = !!n.important;
   $('input-date').value = n.appointmentDate || '';
+  $('input-date-time').value = validTime(n.appointmentTime) ? n.appointmentTime : '';
   if(n.type === 'divider'){
     $('input-divider-text').value = n.text || '';
     setNoteMode('divider');
@@ -1314,6 +1393,7 @@ function openEditNoteModal(fileId){
     setNoteMode('note');
     if(n.audioAttachmentPath){
       $('audio-existing').innerHTML = `<button type="button" class="note-file-link" style="color:#000;" data-action="play-audio" data-path="${escapeAttr(n.audioAttachmentPath)}" data-origin="${escapeAttr(n.originItemId || boardRef.itemId)}">🎤 Vorhandene Aufnahme abspielen</button>`;
+      if(typeof updateTranscribeButton === 'function') updateTranscribeButton();
     }
   }
   $('add-modal').style.display = 'flex';
@@ -1327,11 +1407,23 @@ function closeAddModal(){
   setNoteMode('note');
 }
 
+// Diese Felder setzt das Formular selbst; alle anderen werden beim Bearbeiten 1:1 übernommen.
+// (attachmentName/attachmentPath = altes Einzel-Typ-Format, wird beim Speichern ins neue Format überführt.)
+const FORM_MANAGED_FIELDS = ['id', 'type', 'author', 'authorEmail', 'timestamp', 'important', 'editedBy', 'editedByEmail', 'editedAt',
+  'text', 'url', 'imageAttachmentName', 'imageAttachmentPath', 'fileAttachmentName', 'fileAttachmentPath',
+  'audioAttachmentName', 'audioAttachmentPath', 'items', 'appointmentDate', 'appointmentTime', 'attachmentName', 'attachmentPath', 'originItemId'];
 // Baut die Karte aus dem Formular. Gibt {note, attachments, removeAttachments} zurück oder wirft eine Meldung.
 async function buildNoteFromForm(existing){
   const id = (existing && existing.id) || uuid();
   const now = new Date().toISOString();
+  // Felder, die das Formular nicht kennt (z.B. "erledigt"), unverändert übernehmen – so geht beim Bearbeiten nichts verloren
+  const carried = {};
+  if(existing){
+    const raw = noteToFile(existing);
+    Object.keys(raw).forEach(k => { if(!FORM_MANAGED_FIELDS.includes(k) && raw[k] !== undefined) carried[k] = raw[k]; });
+  }
   const note = {
+    ...carried,
     id, type: noteMode,
     author: existing ? existing.author : me.name,
     authorEmail: existing ? existing.authorEmail : me.email,
@@ -1391,6 +1483,8 @@ async function buildNoteFromForm(existing){
     if(activeComponents.has('date')){
       note.appointmentDate = $('input-date').value;
       if(!note.appointmentDate) throw new Error('Bitte ein Termin-Datum wählen oder den Termin-Baustein wieder abwählen.');
+      const t = $('input-date-time').value;
+      if(validTime(t)) note.appointmentTime = t;
     }
     const hasAnything = note.text || note.url || note.imageAttachmentPath || note.fileAttachmentPath || note.audioAttachmentPath || note.appointmentDate || (note.items && note.items.length);
     if(!hasAnything) throw new Error('Bitte mindestens einen Inhalt hinzufügen.');
@@ -1450,6 +1544,7 @@ async function saveNoteOnline(built, board, existing, { overrideETag } = {}){
     : await createNoteFile(board, note);
   const stored = { ...note, fileId: item.id, eTag: item.eTag, cTag: item.cTag, originItemId: board.itemId };
   if(existing && existing.dueDate !== undefined) stored.dueDate = existing.dueDate;
+  if(existing && existing.dueTime !== undefined) stored.dueTime = existing.dueTime;
   attachments.forEach(a => { if(a.file.type.startsWith('image/') || a.file.type.startsWith('audio/')) imageCache[a.path] = URL.createObjectURL(a.file); });
   if(isImportantBoard()){
     if(note.important) notesById[item.id] = stored; else delete notesById[item.id];
@@ -1504,7 +1599,7 @@ async function resolveEditConflict(built, board, existing){
   if(choice === 'mine') await saveNoteOnline(built, board, existing, { overrideETag: latest.eTag });
   else if(choice === 'copy') await saveAsNewCard(built, board);
   else if(choice === 'theirs'){
-    notesById[existing.fileId] = { ...latest, dueDate: existing.dueDate };
+    notesById[existing.fileId] = { ...latest, dueDate: existing.dueDate, dueTime: existing.dueTime };
     built.attachments.forEach(a => deleteAttachment(board.driveId, board.itemId, a.path));
     closeAddModal(); renderBoard();
   }
