@@ -1,7 +1,7 @@
 // ============ KONFIGURATION ============
 // Bei jeder Änderung an der App diese Version hochzählen – darüber erkennen offene Apps,
 // dass es eine neue Version gibt (Banner "Neu laden").
-const APP_VERSION = '2026-11-13-01';
+const APP_VERSION = '2026-11-13-02';
 
 const CLIENT_ID = '482edec5-c2bf-49db-85bf-cbd5ebfa1989';
 const REDIRECT_URI = 'https://sigekaspar.github.io/familyboard/';
@@ -15,13 +15,15 @@ const BACKUP_FOLDER = '_backups';
 const ARCHIVE_FOLDER = '_archive';
 const IMPORTANT_INDEX_FILE = '_important.json';
 const IMPORTANT_BOARD_NAME = 'Wichtig';
-const BACKUP_RETENTION_DAYS = 30;     // die neuesten 30 Tages-Sicherungen bleiben immer (bisherige Regel)
-// Sicherungen: die letzten 30 Tage täglich (wie bisher), ältere werden NICHT mehr gelöscht,
-// sondern auf eine pro Woche ausgedünnt – bis 26 Wochen zurück. Es geht also nichts verloren,
-// was bisher behalten wurde; der Verlauf reicht weiter zurück.
-// Wer weniger Dateien möchte: BACKUP_DAILY_DAYS z.B. auf 14 setzen.
-const BACKUP_DAILY_DAYS = 30;
-const BACKUP_WEEKLY_WEEKS = 26;
+// Sicherungen (Tages-Ordner in _backups):
+//  - die letzten 7 Tage: jeder Tag
+//  - danach bis 4 Wochen zurück: eine pro Woche (die neueste der Woche)
+//  - danach: noch 2 monatliche (je die neueste des Monats)
+//  - alles Ältere wird gelöscht (landet im OneDrive-Papierkorb) – AUSSER eine Sicherung enthält die letzte
+//    Kopie einer Karte, die es sonst nirgends mehr gibt: diese bleibt (die jeweils neueste solche Kopie).
+const BACKUP_DAILY_DAYS = 7;
+const BACKUP_WEEKLY_WEEKS = 4;
+const BACKUP_MONTHLY_COUNT = 2;
 const SAFETY_BACKUP_PREFIX = 'vor-wiederherstellung_';
 const SAFETY_BACKUP_KEEP = 5;
 const IMAGE_MAX_EDGE = 2000;          // Fotos werden vor dem Upload auf max. 2000 px verkleinert

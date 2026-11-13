@@ -469,7 +469,7 @@ async function loadImportantFromServer(prev){
   return { notesById: fresh, noteOrder: order, deltaLink: null, orderCTag: res.eTag };
 }
 
-// ---------- Tägliches Backup (30 Tage täglich, danach wöchentlich; ohne Anhänge) ----------
+// ---------- Tägliches Backup (7 Tage täglich, 4 Wochen wöchentlich, 2 monatlich; ohne Anhänge) ----------
 async function maybeRunDailyBackup(board){
   if(!board || board.folderName === IMPORTANT_BOARD_NAME || !isOnline) return;
   const today = todayStr();
@@ -483,7 +483,7 @@ async function maybeRunDailyBackup(board){
     if(!exists){
       const ok = await copyBoardNotesTo(board, backupFolder.id, today);
       if(!ok) return;
-      await cleanupOldBackups(board.driveId, backupFolder.id);
+      await cleanupOldBackups(board.driveId, backupFolder.id, board.itemId);
     }
     localSet(flagKey, today);
   }catch(e){ console.warn('Tägliches Backup fehlgeschlagen', e); }
@@ -503,35 +503,59 @@ async function copyBoardNotesTo(board, parentId, folderName){
   }).catch(e => console.warn('Backup-Kopie fehlgeschlagen', item.name, e)));
   return true;
 }
-// Welche Tages-Sicherungen bleiben? Behalten wird alles, was die bisherige Regel behalten hat
-// (die neuesten BACKUP_RETENTION_DAYS Ordner), dazu alles aus den letzten BACKUP_DAILY_DAYS Tagen
-// und von älteren Wochen jeweils die neueste Sicherung – bis BACKUP_WEEKLY_WEEKS zurück.
+// Welche Tages-Sicherungen bleiben? (Regel siehe config.js)
 function backupDaysToKeep(dayNames, today){
   const sorted = dayNames.filter(n => /^\d{4}-\d{2}-\d{2}$/.test(n)).sort();
-  const keep = new Set(sorted.slice(-BACKUP_RETENTION_DAYS)); // alte Regel: nie weniger als bisher
+  const keep = new Set();
+  if(!sorted.length) return keep;
   const toDate = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
   const t = toDate(today);
   const ageDays = iso => Math.round((t - toDate(iso)) / 86400000);
   const weekKey = iso => { const d = toDate(iso); const day = (d.getDay() + 6) % 7; d.setDate(d.getDate() - day); return isoDateLocal(d); };
-  const newestOfWeek = {};
-  for(const n of sorted){
+  const newestOfWeek = {}, newestOfMonth = {};
+  for(const n of sorted){ // aufsteigend sortiert -> der letzte Eintrag einer Woche/eines Monats gewinnt
     const age = ageDays(n);
     if(age <= BACKUP_DAILY_DAYS) keep.add(n);
-    else if(age <= BACKUP_WEEKLY_WEEKS * 7) newestOfWeek[weekKey(n)] = n; // sortiert -> der letzte gewinnt
+    else if(age <= BACKUP_WEEKLY_WEEKS * 7) newestOfWeek[weekKey(n)] = n;
+    else newestOfMonth[n.slice(0, 7)] = n;
   }
   Object.values(newestOfWeek).forEach(n => keep.add(n));
+  Object.keys(newestOfMonth).sort().slice(-BACKUP_MONTHLY_COUNT).forEach(k => keep.add(newestOfMonth[k]));
+  keep.add(sorted[sorted.length - 1]); // die neueste Sicherung bleibt immer
   return keep;
 }
-async function cleanupOldBackups(driveId, backupFolderId){
+// Ausdünnen nach der Regel – mit Schutz: Eine Sicherung, die als letzte noch eine Karte enthält
+// (die weder aktuell, noch im Archiv, noch in einer neueren behaltenen Sicherung existiert), wird nie gelöscht.
+async function cleanupOldBackups(driveId, backupFolderId, boardItemId){
   try{
     const res = await graphListAll(`/drives/${driveId}/items/${backupFolderId}/children?$select=id,name,folder&$top=500`);
     const days = res.filter(it => it.folder && /^\d{4}-\d{2}-\d{2}$/.test(it.name)).sort((a, b) => a.name.localeCompare(b.name));
     const safety = res.filter(it => it.folder && it.name.startsWith(SAFETY_BACKUP_PREFIX)).sort((a, b) => a.name.localeCompare(b.name));
     const keepDays = backupDaysToKeep(days.map(d => d.name), todayStr());
-    const toDelete = days.filter(d => !keepDays.has(d.name))
-      .concat(safety.slice(0, Math.max(0, safety.length - SAFETY_BACKUP_KEEP)));
+    const candidates = days.filter(d => !keepDays.has(d.name));
+    const toDelete = [];
+    if(candidates.length){
+      const idOf = name => { const m = /^note_(.+)\.json$/.exec(name || ''); return m ? m[1] : null; };
+      const namesIn = async folderId => (await graphListAll(`/drives/${driveId}/items/${folderId}/children?$select=name,file&$top=500`))
+        .filter(c => c.file).map(c => idOf(c.name)).filter(Boolean);
+      const covered = new Set();
+      if(boardItemId){
+        (await namesIn(boardItemId)).forEach(id => covered.add(id));
+        try{ const arch = await getChildByPath(driveId, boardItemId, ARCHIVE_FOLDER); (await namesIn(arch.id)).forEach(id => covered.add(id)); }
+        catch(e){ if(!isNotFound(e)) throw e; }
+      }
+      for(const d of days.filter(x => keepDays.has(x.name))) (await namesIn(d.id)).forEach(id => covered.add(id));
+      // Neueste zuerst: die jüngste Kopie einer sonst verlorenen Karte bleibt erhalten
+      for(const d of candidates.slice().reverse()){
+        const ids = await namesIn(d.id);
+        const unique = ids.filter(id => !covered.has(id));
+        if(unique.length){ ids.forEach(id => covered.add(id)); continue; } // behalten
+        toDelete.push(d);
+      }
+    }
+    toDelete.push(...safety.slice(0, Math.max(0, safety.length - SAFETY_BACKUP_KEEP)));
     for(const d of toDelete) await graphFetchRaw(`/drives/${driveId}/items/${d.id}`, { method:'DELETE' }).catch(() => {});
-  }catch(e){}
+  }catch(e){ console.warn('Sicherungen ausdünnen übersprungen', e); } // im Zweifel nichts löschen
 }
 async function listBackups(board){
   let backupFolder;

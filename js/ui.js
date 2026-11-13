@@ -676,12 +676,24 @@ function renderNote(n, opts = {}){
     if(datePart || timePart) timeBadge = `<span class="due-time-badge${opts.overdue ? ' overdue' : ''}">${[datePart, timePart].filter(Boolean).join(' ')}</span>`;
   }
   const doneBadge = n.done ? '<span class="done-badge" title="Erledigt">✓ erledigt</span>' : '';
-  return `<div class="note${n.pending ? ' pending' : ''}${n.done ? ' done-card' : ''}${onImportant ? ' wichtig-card' : ''}" data-id="${id}"${cardStyle}>
-    ${n.important ? '<span class="important-badge" title="Auch in \'Wichtig\'">⭐</span>' : ''}
-    <div class="note-actions">${onImportant && !n.pending ? `<button data-action="important-done" data-id="${id}" title="Erledigt" aria-label="Erledigt">✓</button>` : ''}<button data-action="note-menu" data-id="${id}" title="Menü" aria-label="Menü">⋮</button></div>
-    ${timeBadge}${doneBadge}
+  const star = n.important ? '<span class="important-badge" title="Auch in \'Wichtig\'">⭐</span>' : '';
+  const actions = `<div class="note-actions">${onImportant && !n.pending ? `<button data-action="important-done" data-id="${id}" title="Erledigt" aria-label="Erledigt">✓</button>` : ''}<button data-action="note-menu" data-id="${id}" title="Menü" aria-label="Menü">⋮</button></div>`;
+  const pendingBadge = n.pending ? '<span class="pending-badge" title="Wird übertragen, sobald du online bist">⏳</span>' : '';
+  const cls = `note${n.pending ? ' pending' : ''}${n.done ? ' done-card' : ''}${onImportant ? ' wichtig-card' : ''}`;
+  if(onImportant){
+    // "Wichtig": Kopfzeile mit Stern, Tag/Uhrzeit und Knöpfen (absolut positioniert)
+    return `<div class="${cls}" data-id="${id}"${cardStyle}>
+    ${star}${actions}${timeBadge}${doneBadge}
     ${parts.join('')}
-    ${n.pending ? '<span class="pending-badge" title="Wird übertragen, sobald du online bist">⏳</span>' : ''}
+    ${pendingBadge}
+  </div>`;
+  }
+  // Normale Boards: Stern | erster Inhalt | ⋮ nebeneinander – so verdeckt der Knopf nie den Text
+  const first = parts.shift() || '';
+  return `<div class="${cls}" data-id="${id}"${cardStyle}>
+    <div class="note-head">${star}<div class="note-head-main">${doneBadge}${first}</div>${actions}</div>
+    ${parts.join('')}
+    ${pendingBadge}
   </div>`;
 }
 
@@ -1300,8 +1312,8 @@ let editingNoteId = null;
 function setNoteMode(mode){
   noteMode = mode;
   document.querySelectorAll('#mode-tabs .type-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
-  $('component-toggles').style.display = mode === 'note' ? 'flex' : 'none';
-  $('important-row').style.display = mode === 'note' ? 'flex' : 'none';
+  $('component-toggles').style.display = mode === 'note' ? '' : 'none';
+  syncStarToggle();
   $('field-divider').style.display = mode === 'divider' ? 'block' : 'none';
   document.querySelectorAll('.comp-toggle').forEach(btn => {
     const c = btn.dataset.comp;
@@ -1312,6 +1324,13 @@ function setNoteMode(mode){
   if(mode === 'divider') setTimeout(() => $('input-divider-text').focus(), 60);
   else if(activeComponents.has('text')) setTimeout(() => $('input-text').focus(), 60);
 }
+// ⭐ in der Symbolreihe spiegelt die (versteckte) Checkbox "Wichtig"
+function syncStarToggle(){
+  const on = $('input-important').checked;
+  const b = $('star-toggle');
+  if(b){ b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+}
+function toggleStar(){ $('input-important').checked = !$('input-important').checked; syncStarToggle(); }
 function toggleComponent(comp){
   if(activeComponents.has(comp)) activeComponents.delete(comp); else activeComponents.add(comp);
   const isOn = activeComponents.has(comp);
@@ -1347,6 +1366,7 @@ function resetNoteForm(){
   ['input-text', 'input-link', 'input-image', 'input-file', 'input-date', 'input-date-time', 'input-divider-text'].forEach(id => $(id).value = '');
   if(typeof resetTranscribeUi === 'function') resetTranscribeUi();
   $('input-important').checked = false;
+  syncStarToggle();
   $('audio-existing').innerHTML = '';
   audioBlob = null;
   renderAudioPreview();
@@ -1654,6 +1674,7 @@ const actions = {
   'add-note': () => openAddModal(),
   'note-mode': el => setNoteMode(el.dataset.mode),
   'toggle-comp': el => toggleComponent(el.dataset.comp),
+  'toggle-star': () => toggleStar(),
   'add-draft-item': () => addChecklistItemRow(),
   'remove-draft-item': el => removeChecklistItemRow(el.dataset.item),
   'record-audio': () => startAudioRecording(),
