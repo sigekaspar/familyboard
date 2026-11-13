@@ -25,7 +25,7 @@ let msalInstance = null;
 let msalInitError = null;
 try{
   if(window.__msalLoadFailed || typeof msal === 'undefined'){
-    throw new Error('Die Anmelde-Bibliothek (MSAL) von Microsoft konnte nicht geladen werden. Prüfe deine Internetverbindung oder ob ein Werbeblocker/Firewall alcdn.msauth.net blockiert.');
+    throw new Error('Die Anmelde-Bibliothek (MSAL) konnte nicht geladen werden. Bitte die Seite neu laden (beim ersten Start wird Internet benötigt).');
   }
   msalInstance = new msal.PublicClientApplication(msalConfig);
 }catch(e){ msalInitError = e; console.error('MSAL init failed:', e); }

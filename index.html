@@ -21,7 +21,8 @@
     <h1>Family Board</h1>
     <div class="header-actions" id="header-right">
       <span id="connectivity"></span>
-      <button class="icon-btn" id="search-btn" data-action="toggle-search" title="Suchen">🔍</button>
+      <button class="icon-btn" id="search-btn" data-action="toggle-search" title="Suchen" aria-label="Suchen">🔍</button>
+      <button class="icon-btn" id="settings-btn" data-action="open-settings" title="Einstellungen" aria-label="Einstellungen">⚙</button>
       <div class="user-chip" id="user-chip"></div>
     </div>
   </div>
@@ -62,18 +63,22 @@
 <div class="modal-overlay" id="add-modal">
   <div class="modal">
     <h3 id="note-modal-title">Neue Notiz</h3>
-    <div class="type-tabs" id="mode-tabs">
-      <div class="type-tab active" data-mode="note" data-action="note-mode" title="Notiz">🗒️</div>
-      <div class="type-tab" data-mode="divider" data-action="note-mode" title="Trennlinie">➖</div>
-    </div>
-    <div class="component-toggles" id="component-toggles">
-      <button type="button" class="comp-toggle active" data-comp="text" data-action="toggle-comp">📝 Text</button>
-      <button type="button" class="comp-toggle" data-comp="link" data-action="toggle-comp">🔗 Link</button>
-      <button type="button" class="comp-toggle" data-comp="image" data-action="toggle-comp">🖼️ Foto</button>
-      <button type="button" class="comp-toggle" data-comp="file" data-action="toggle-comp">📎 Datei</button>
-      <button type="button" class="comp-toggle" data-comp="audio" data-action="toggle-comp">🎤 Audio</button>
-      <button type="button" class="comp-toggle" data-comp="checklist" data-action="toggle-comp">☑️ Checkliste</button>
-      <button type="button" class="comp-toggle" data-comp="date" data-action="toggle-comp">📅 Termin</button>
+    <!-- Eine kompakte Symbolreihe: Notiz/Trennlinie | Bausteine | Wichtig -->
+    <div class="editor-toolbar">
+      <div class="tool-group" id="mode-tabs">
+        <button type="button" class="type-tab tool-btn active" data-mode="note" data-action="note-mode" title="Notiz" aria-label="Notiz">🗒️</button>
+        <button type="button" class="type-tab tool-btn" data-mode="divider" data-action="note-mode" title="Trennlinie" aria-label="Trennlinie">➖</button>
+      </div>
+      <div class="tool-group" id="component-toggles">
+        <button type="button" class="comp-toggle tool-btn active" data-comp="text" data-action="toggle-comp" title="Text" aria-label="Text">📝</button>
+        <button type="button" class="comp-toggle tool-btn" data-comp="link" data-action="toggle-comp" title="Link" aria-label="Link">🔗</button>
+        <button type="button" class="comp-toggle tool-btn" data-comp="image" data-action="toggle-comp" title="Foto" aria-label="Foto">🖼️</button>
+        <button type="button" class="comp-toggle tool-btn" data-comp="file" data-action="toggle-comp" title="Datei" aria-label="Datei">📎</button>
+        <button type="button" class="comp-toggle tool-btn" data-comp="audio" data-action="toggle-comp" title="Audio" aria-label="Audio">🎤</button>
+        <button type="button" class="comp-toggle tool-btn" data-comp="checklist" data-action="toggle-comp" title="Checkliste" aria-label="Checkliste">☑️</button>
+        <button type="button" class="comp-toggle tool-btn" data-comp="date" data-action="toggle-comp" title="Termin" aria-label="Termin">📅</button>
+        <button type="button" class="star-toggle tool-btn" id="star-toggle" data-action="toggle-star" title="Auch im Board &quot;Wichtig&quot; anzeigen" aria-label="Wichtig" aria-pressed="false">⭐</button>
+      </div>
     </div>
     <div id="field-text"><textarea id="input-text" placeholder="Was möchtest du teilen?"></textarea></div>
     <div id="field-link" style="display:none;">
@@ -96,18 +101,22 @@
         <span id="audio-status" class="hint" style="margin:0;"></span>
       </div>
       <div id="audio-preview"></div>
+      <button type="button" id="audio-transcribe-btn" class="btn btn-secondary" style="display:none; margin-bottom:10px;" data-action="transcribe-draft">📝 In Text umwandeln</button>
+      <div id="audio-transcribe-status" class="hint"></div>
     </div>
     <div id="field-checklist" style="display:none;">
       <div id="checklist-items-container"></div>
       <button type="button" class="add-checklist-item-btn" data-action="add-draft-item">+ Punkt hinzufügen</button>
     </div>
     <div id="field-date" style="display:none;">
-      <input type="date" id="input-date">
+      <div class="date-time-row"><input type="date" id="input-date"><input type="time" id="input-date-time" aria-label="Uhrzeit (optional)" title="Uhrzeit (optional)"></div>
+      <div class="hint">Uhrzeit ist optional.</div>
     </div>
     <div id="field-divider" style="display:none;">
       <input type="text" id="input-divider-text" placeholder="Beschriftung (optional)">
     </div>
-    <label class="checkbox-row" id="important-row"><input type="checkbox" id="input-important"> ⭐ Auch im Board "Wichtig" anzeigen</label>
+    <!-- Wert für "Wichtig" (wird über den ⭐-Knopf in der Symbolreihe gesetzt) -->
+    <label class="checkbox-row" id="important-row" hidden><input type="checkbox" id="input-important"> ⭐ Auch im Board "Wichtig" anzeigen</label>
     <div class="modal-actions">
       <button class="btn btn-secondary" data-action="close-note-modal">Abbrechen</button>
       <button class="btn btn-primary" id="save-note-btn" data-action="save-note">Anheften</button>
@@ -135,7 +144,7 @@
 <div class="modal-overlay" id="manage-boards-modal">
   <div class="modal">
     <h3>Boards verwalten</h3>
-    <p class="hint">Reihenfolge ändern – gilt danach für alle Personen und Geräte.</p>
+    <p class="hint">Reihenfolge ändern – gilt danach für alle Personen und Geräte. Mit 👁 / 🙈 blendest du ein Board als Tab aus oder wieder ein; der Inhalt bleibt dabei vollständig erhalten und ist weiter über die Suche und "Wichtig" erreichbar.</p>
     <div class="manage-boards-list" id="manage-boards-list"></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" data-action="close-manage">Fertig</button>
@@ -165,16 +174,53 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <h3>Einstellungen</h3>
+    <h4 class="settings-h">🎤 Audio in Text (Azure)</h4>
+    <p class="hint" style="margin-top:0;">Schlüssel und Region deiner Azure-Speech-Ressource. Wird nur auf diesem Gerät gespeichert, nicht in OneDrive.</p>
+    <input type="text" id="speech-key-input" placeholder="Schlüssel (Key 1 oder Key 2)" autocomplete="off" spellcheck="false">
+    <input type="text" id="speech-region-input" placeholder="Region, z.B. switzerlandnorth" autocomplete="off" spellcheck="false">
+    <input type="text" id="speech-locale-input" placeholder="Sprache, z.B. de-CH" autocomplete="off" spellcheck="false">
+    <div class="modal-actions" style="justify-content:flex-start;">
+      <button class="btn btn-secondary" data-action="test-speech">Verbindung testen</button>
+      <button class="btn btn-secondary" data-action="clear-speech" style="color:#b23;">Schlüssel entfernen</button>
+    </div>
+    <div id="speech-test-status" class="hint" style="margin-top:6px;"></div>
+    <h4 class="settings-h">🧹 Aufräumen</h4>
+    <p class="hint" style="margin-top:0;">Sucht Fotos/Dateien/Aufnahmen, die zu keiner Karte mehr gehören – weder aktuell noch im Archiv noch in einer Sicherung. Vor dem Löschen siehst du die Liste; gelöschte Dateien landen im OneDrive-Papierkorb.</p>
+    <button class="btn btn-secondary" data-action="find-orphans">Verwaiste Anhänge suchen</button>
+    <div id="orphan-status" class="hint" style="margin-top:6px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" data-action="save-settings">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="due-modal">
+  <div class="modal">
+    <h3>Tag &amp; Uhrzeit</h3>
+    <p class="hint" style="margin-top:0;" id="due-modal-hint">Für die Ansicht "Wichtig".</p>
+    <div class="date-time-row"><input type="date" id="due-date-input"><input type="time" id="due-time-input"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" data-action="clear-due" style="margin-right:auto;">Ohne Tag</button>
+      <button class="btn btn-secondary" data-action="close-due">Abbrechen</button>
+      <button class="btn btn-primary" data-action="save-due">Speichern</button>
+    </div>
+  </div>
+</div>
+
 <div id="lightbox" data-action="close-lightbox">
   <img id="lightbox-img" alt="Bild">
   <div id="lightbox-status"></div>
 </div>
 
-<script src="https://alcdn.msauth.net/browser/2.28.1/js/msal-browser.min.js" onerror="window.__msalLoadFailed=true"></script>
+<script src="js/lib/msal-browser-2.39.0.min.js" onerror="window.__msalLoadFailed=true"></script>
 <script src="js/config.js"></script>
 <script src="js/graph.js"></script>
 <script src="js/data.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/extras.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
